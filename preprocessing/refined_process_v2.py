@@ -2,11 +2,8 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import pandas as pd
-import pytesseract
 import cv2
-import skimage as sk
 from datetime import datetime as dt
 from PIL import Image
 from scipy import stats

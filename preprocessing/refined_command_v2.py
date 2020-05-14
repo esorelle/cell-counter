@@ -41,5 +41,6 @@ def cli(flip, gauss_blur_sigma, window_thresh, scaling_thresh, min_blob_area, ma
     print('...counting finished')
     print('refer to analysis_metadata.txt for running parameters details')
 
+
 if __name__ == '__main__':
     cli()
