@@ -12,6 +12,7 @@ from skimage import feature, filters, morphology, util
 from skimage.measure import label, regionprops
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
+from warnings import warn
 
 
 apartment_workflow = 'denoise -> norm -> edges -> dilate -> invert -> maxout -> close -> extentout -> open -> minout -> label -> borderout -> apartment_mask'
@@ -149,12 +150,24 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
 
     r_degs = []
     for r in rows:
-        gradient, intercept, r_value, p_value, std_err = stats.linregress(c_centers[r[0]:r[-1]])
+        # For rows with less than 3 points, lin regress probably isn't a good approach.
+        # We could find the slope between only 2 points, but any error in their true centers
+        # would over-weight the mean of the rows
+        if len(r) < 3:
+            continue
+        gradient, intercept, r_value, p_value, std_err = stats.linregress(c_centers[r[0]:r[-1] + 1])
         r_deg = np.degrees(np.arctan(gradient))
         r_degs.append(r_deg)
 
+    # If no rows contained 3 or more anchors, set the rotation correction angle to zero.
+    if len(r_degs) == 0:
+        # TODO: Leave to Elliott to decide how to log these non-rotation corrected images
+        #       For now, just warn when this happens
+        warn("%s had insufficient anchors detected for rotation correction" % input_img, UserWarning)
+        r_deg_mean = 0.0
+    else:
+        r_deg_mean = np.mean(r_degs)
 
-    r_deg_mean = np.mean(r_degs)
     n_rows, n_cols = np.shape(img_8b)
     rot_mat = cv2.getRotationMatrix2D((n_cols/2., n_rows/2.), r_deg_mean, 1)
     img_rot = cv2.warpAffine(img_8b, rot_mat, (n_cols, n_rows))
@@ -322,7 +335,7 @@ def process_directory_relative_id(flip, gauss_blur_sigma, window_thresh, scaling
     cell_counts_df = pd.DataFrame(columns = ['Folder_Name', 'Image_Name', 'Chamber_ID', 'Detected_Cells'])
     num_chambers_detected = 0
     apartments_per_image = []
-    for i in range(0,num_images):
+    for i in range(0, num_images):
         img_name = images[i]
         raw_img = plt.imread(img_name)
         if flip == True:
