@@ -166,6 +166,7 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
         warn("%s had insufficient anchors detected for rotation correction" % input_img, UserWarning)
         r_deg_mean = 0.0
     else:
+        # TODO: Should also handle cases where the rotation correction is excessive (> 2-3 degrees)
         r_deg_mean = np.mean(r_degs)
 
     n_rows, n_cols = np.shape(img_8b)
