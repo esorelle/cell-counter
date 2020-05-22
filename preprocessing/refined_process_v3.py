@@ -145,50 +145,51 @@ def get_chamber_cell_counts_bf(
     # 3,1 --> changed to 4,1 to increase blob grouping of dense cells as contiguous apartment
     blobs_2 = morphology.closing(blobs_1, morphology.selem.rectangle(5, 1))
     blobs_3 = np.zeros(np.shape(input_img))
-    N, W, S, E = [], [], [], []
-    true_N = []
+    north, west, south, east = [], [], [], []
+    true_north = []
 
     for blob in regionprops(label(blobs_2)):
         if blob.extent > min_blob_extent:
-            _N, _W, _S, _E = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
+            tmp_north, tmp_west, tmp_south, tmp_east = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
+
             # new condition based on bounding box dimensions -- remove if needed
-            if np.logical_and(70 < _E - _W < 100, 180 < _S - _N < 240):
-                N.append(_N)
-                W.append(_W - 3)
-                S.append(_S)
-                E.append(_E + 3)
-                true_N.append(_S - 212)
+            if np.logical_and(70 < tmp_east - tmp_west < 100, 180 < tmp_south - tmp_north < 240):
+                north.append(tmp_north)
+                west.append(tmp_west - 3)
+                south.append(tmp_south)
+                east.append(tmp_east + 3)
+                true_north.append(tmp_south - 212)
                 hull = blob.convex_image
-                blobs_3[_N:_S, _W:_E] = hull
+                blobs_3[tmp_north:tmp_south, tmp_west:tmp_east] = hull
 
     blobs_4 = morphology.opening(blobs_3, morphology.selem.disk(3))
     blobs_5 = blobs_4 > 0
     blobs_6 = morphology.remove_small_objects(blobs_5, min_blob_area)
     blobs_7 = label(blobs_6, connectivity=2)
     refined_blobs = np.zeros(np.shape(input_img))
-    N, W, S, E = [], [], [], []
-    true_N = []
+    north, west, south, east = [], [], [], []
+    true_north = []
     for blob in regionprops(blobs_7):
         # edge border of image -- was 50 pixels
         if abs(blob.centroid[0] - np.shape(input_img)[0]) > 70 and blob.centroid[0] > 70:
             if abs(blob.centroid[1] - np.shape(input_img)[1]) > 70 and blob.centroid[1] > 70:
-                _N, _W, _S, _E = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
-                N.append(_N)
-                W.append(_W - 3)
-                S.append(_S)
-                E.append(_E + 3)
-                true_N.append(_S - 212)
+                tmp_north, tmp_west, tmp_south, tmp_east = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
+                north.append(tmp_north)
+                west.append(tmp_west - 3)
+                south.append(tmp_south)
+                east.append(tmp_east + 3)
+                true_north.append(tmp_south - 212)
                 hull = blob.convex_image
-                refined_blobs[_N:_S, _W:_E] = hull
+                refined_blobs[tmp_north:tmp_south, tmp_west:tmp_east] = hull
 
     # make rectangles (or insert chamber polygon ndarray with reference to anchor point)
     rect_mask = np.zeros(np.shape(input_img))
-    for i in range(len(true_N)):
-        rect_mask[S[i]-212:S[i]-15, W[i]:E[i]] = 1
+    for i in range(len(true_north)):
+        rect_mask[south[i]-212:south[i]-15, west[i]:east[i]] = 1
 
     # de-rotate the image by finding chamber row angles and correcting
-    anchors_x = [np.int(np.round((E[i] + W[i]) / 2)) for i in range(len(E))]
-    anchors_y = [np.int(np.round(S[i])) for i in range(len(S))]     # analog of centers_y in Scott's code
+    anchors_x = [np.int(np.round((east[i] + west[i]) / 2)) for i in range(len(east))]
+    anchors_y = [np.int(np.round(south[i])) for i in range(len(south))]     # analog of centers_y in Scott's code
     c_centers = [(anchors_x[i], anchors_y[i]) for i in range(len(anchors_y))]
     assigned_idx = []
     centers_y = np.array(anchors_y)
@@ -291,9 +292,9 @@ def get_chamber_cell_counts_bf(
     img_blur = filters.gaussian(input_img, 1)
     back_map = filters.threshold_local(img_blur, window_thresh, offset=0)
     img_scaled = np.divide(img_blur, back_map) * 255
-    selem = morphology.disk(tophat_selem)
+    struct_elem = morphology.disk(tophat_selem)
     img_scaled = img_scaled / 255
-    b0 = morphology.white_tophat(img_scaled, selem)
+    b0 = morphology.white_tophat(img_scaled, struct_elem)
     b1 = b0 * (b0 > 0.035)
     b2 = filters.gaussian(b1, sigma=1.25)
     b3 = b2 > 0.05
@@ -371,11 +372,11 @@ def get_chamber_cell_counts_bf(
     # tabulate the counted cells by chamber for output
     prefix = img_name[img_name.find('ST_'):img_name.find('ST_') + 14] + '_CHAMBER_'
     address_counts = {}
-    chamber_cell_count_array = np.zeros(len(N))
+    chamber_cell_count_array = np.zeros(len(north))
     for p in range(len(x_coords)):
-        for c in range(len(true_N)):
-            if W[c] < x_coords[p] < E[c]:
-                if S[c] - 212 < y_coords[p] < S[c]-15:
+        for c in range(len(true_north)):
+            if west[c] < x_coords[p] < east[c]:
+                if south[c] - 212 < y_coords[p] < south[c]-15:
                     chamber_cell_count_array[c] += 1
     for chamber in range(len(chamber_cell_count_array)):
         if chamber < 9:
