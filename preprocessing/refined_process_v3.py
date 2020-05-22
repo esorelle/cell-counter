@@ -2,16 +2,13 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import pandas as pd
-import pytesseract
 import cv2
-import skimage as sk
 from datetime import datetime as dt
 from PIL import Image
 from scipy import stats
 from scipy import ndimage as ndi
-from skimage import feature, filters, morphology, util
+from skimage import filters, morphology, util
 from skimage.measure import label, regionprops
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
