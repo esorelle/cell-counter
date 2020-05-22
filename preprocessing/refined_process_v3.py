@@ -192,7 +192,7 @@ def get_chamber_cell_counts_bf(
     c_centers = [(anchors_x[i], anchors_y[i]) for i in range(len(anchors_y))]
     assigned_idx = []
     centers_y = np.array(anchors_y)
-    row_dist = 110                      # rows are separated by roughly 220px
+    row_dist = 110  # rows are separated by roughly 220px
     rows = []
     for i, cy in enumerate(centers_y):
         if i in assigned_idx:
@@ -213,8 +213,6 @@ def get_chamber_cell_counts_bf(
             r_degs.append(r_deg)
 
     r_deg_mean = np.mean(r_degs)
-    # if r_deg_mean > 10:             # 2020-05-13: a different way to override if there is an outlier row gradient
-    #     r_deg_mean = 0
     n_rows, n_cols = np.shape(img_8b)
     rot_mat = cv2.getRotationMatrix2D((n_cols/2., n_rows/2.), r_deg_mean, 1)
     img_rot = cv2.warpAffine(img_8b, rot_mat, (n_cols, n_rows))
@@ -246,8 +244,6 @@ def get_chamber_cell_counts_bf(
         cv2.rectangle(new_img, col_rect_vert1, col_rect_vert2, (190, 160, 65), 2)
         cv2.drawContours(new_img, [apt_c], 0, (65, 105, 255), 2)
         cv2.drawContours(apartment_mask, [apt_c], 0, (255, 255, 255), -1)
-        # save apartment_mask for filtering cell counts
-        # apt_regions.append(apt_c)
 
     single_digits = []
     for r in row_text_regions:
@@ -353,24 +349,12 @@ def get_chamber_cell_counts_bf(
         plt.tight_layout()
         plt.savefig(img_name + '009_labeled_refined_chambers' + '.png')
         plt.close()
-        # old rectangle chamber overlay -- updated by direct apartment mask above
-        # fig, ax = plt.subplots(figsize=(10, 6))
-        # ax.imshow(input_img, cmap='gray')
-        # for i in range(len(true_N)):
-        #     patch = mpatches.Rectangle((W[i],S[i]), E[i] - W[i], -212, fill=False, edgecolor='turquoise', linewidth=2)
-        #     ax.add_patch(patch)
-        # plt.title('010_bounded_chambers_overlay')
-        # plt.tight_layout()
-        # plt.savefig(img_name + '010_bounded_chambers_overlay' + '.png')
-        # plt.close()
+
         os.chdir('..')
     # show detected centroids overlay on input image
     fig, ax = plt.subplots(figsize=(10, 6))
     # subbed new_img for input_img to show detected apartment and text regions
     ax.imshow(new_img, cmap='gray')
-    # for i in range(len(true_N)):
-    #     patch = mpatches.Rectangle((W[i],S[i]), E[i] - W[i], -212, fill=False, edgecolor='dodgerblue', linewidth=2)
-    #     ax.add_patch(patch)
     x_coords, y_coords = [], []
     for region in regionprops(labels):
         if min_cell_area < region.area < max_cell_area:
