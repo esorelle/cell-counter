@@ -1,5 +1,4 @@
 .idea
 venv
-cell_counter
 *.png
 *.pyc
