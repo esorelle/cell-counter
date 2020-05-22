@@ -30,10 +30,12 @@ for i in range(10):
     dig_ref = np.asarray(dig_ref)
     dig_refs.append(dig_ref)
 
+
 # defined image flip
 def flip_horizontal(input_img):
-    flipped_img = input_img[:,::-1]
+    flipped_img = input_img[:, ::-1]
     return flipped_img
+
 
 # defined rotation function
 def rotate(point, origin=(0, 0), degrees=0):
@@ -44,6 +46,7 @@ def rotate(point, origin=(0, 0), degrees=0):
     qy = oy + np.sin(angle) * (px - ox) + np.cos(angle) * (py - oy)
     return qx, qy
 
+
 # identify digits from templates
 def identify_digit(dig_region):
     # padding is crucial & needs to be about 1/2  of the template width/height
@@ -53,9 +56,10 @@ def identify_digit(dig_region):
         res = cv2.matchTemplate(dig_region_pad, dig_ref, cv2.TM_CCOEFF_NORMED)
         scores.append(res.max())
     if np.max(scores) > 0.6:
-        return np.argmax(scores), np.max(scores)           # TO_DO: 2020-05-13: output this score for each row and column and save the confidence scores in output spreadhseet
+        return np.argmax(scores), np.max(scores)
     else:
         return '_', np.max(scores)
+
 
 # cribbed from skimage to create remove_large_objects function
 def _check_dtype_supported(ar):
@@ -140,12 +144,10 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
                 hull = blob.convex_image
                 refined_blobs[_N:_S,_W:_E] = hull
 
-
     # make rectangles (or insert chamber polygon ndarray with reference to anchor point)
     rect_mask = np.zeros(np.shape(input_img))
     for i in range(len(true_N)):
         rect_mask[S[i]-212:S[i]-15, W[i]:E[i]] = 1
-
 
     # de-rotate the image by finding chamber row angles and correcting
     anchors_x = [np.int(np.round((E[i] + W[i]) / 2)) for i in range(len(E))]
@@ -166,14 +168,12 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
         rows.append(row_members)
         assigned_idx.extend(row_members)
 
-
     r_degs = []
     for r in rows:
         gradient, intercept, r_value, p_value, std_err = stats.linregress(c_centers[r[0]:r[-1] + 1])
         if gradient < 1:              # 2020-05-13: override large angle adjustments (observed bug)
             r_deg = np.degrees(np.arctan(gradient))
             r_degs.append(r_deg)
-
 
     r_deg_mean = np.mean(r_degs)
     # if r_deg_mean > 10:             # 2020-05-13: a different way to override if there is an outlier row gradient
