@@ -14,8 +14,24 @@ from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 from warnings import warn
 
-
-apartment_workflow = 'denoise -> norm -> edges -> dilate -> invert -> maxout -> close -> extentout -> open -> minout -> label -> borderout -> de-rotate -> apartment_mask -> read_digits'
+workflow_list = [
+    'denoise',
+    'norm',
+    'edges',
+    'dilate',
+    'invert',
+    'maxout',
+    'close',
+    'extentout',
+    'open',
+    'minout',
+    'label',
+    'borderout',
+    'de-rotate',
+    'apartment_mask',
+    'read_digits'
+]
+apartment_workflow = ' -> '.join(workflow_list)
 cell_workflow = 'denoise -> norm -> tophat -> blur -> distance -> label -> centroids'
 
 # get contour of a single empty apartment for masking
@@ -100,7 +116,20 @@ def remove_large_objects(ar, max_size=64, connectivity=1, in_place=False):
 
 
 # new cell count method that uses chamber blobs to do direct gating
-def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thresh, scaling_thresh, min_blob_area, max_blob_area, min_blob_extent, tophat_selem, min_cell_area, max_cell_area, save_process_pics):
+def get_chamber_cell_counts_bf(
+        input_img,
+        img_name,
+        gauss_blur_sigma,
+        window_thresh,
+        scaling_thresh,
+        min_blob_area,
+        max_blob_area,
+        min_blob_extent,
+        tophat_selem,
+        min_cell_area,
+        max_cell_area,
+        save_process_pics
+):
     # find the chambers
     img_blur = filters.gaussian(input_img, gauss_blur_sigma)
     back_map = filters.threshold_local(img_blur, window_thresh, offset=0)
@@ -118,6 +147,7 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
     blobs_3 = np.zeros(np.shape(input_img))
     N, W, S, E = [], [], [], []
     true_N = []
+
     for blob in regionprops(label(blobs_2)):
         if blob.extent > min_blob_extent:
             _N, _W, _S, _E = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
@@ -365,14 +395,40 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
                     chamber_cell_count_array[c] += 1
     for chamber in range(len(chamber_cell_count_array)):
         if chamber < 9:
-            address_counts[prefix + '00' + str(chamber + 1)] = [str(row_numbers[chamber]), str(col_numbers[chamber]), row_num_avg_conf[chamber], col_num_avg_conf[chamber], int(chamber_cell_count_array[chamber])]
+            address_counts[prefix + '00' + str(chamber + 1)] = [
+                str(row_numbers[chamber]),
+                str(col_numbers[chamber]),
+                row_num_avg_conf[chamber],
+                col_num_avg_conf[chamber],
+                int(chamber_cell_count_array[chamber])
+            ]
         else:
-            address_counts[prefix + '0' + str(chamber + 1)] = [str(row_numbers[chamber]), str(col_numbers[chamber]), row_num_avg_conf[chamber], col_num_avg_conf[chamber], int(chamber_cell_count_array[chamber])]
+            address_counts[prefix + '0' + str(chamber + 1)] = [
+                str(row_numbers[chamber]),
+                str(col_numbers[chamber]),
+                row_num_avg_conf[chamber],
+                col_num_avg_conf[chamber],
+                int(chamber_cell_count_array[chamber])
+            ]
     return address_counts
 
 
 # directory wrapper
-def process_directory_relative_id(flip, gauss_blur_sigma, window_thresh, scaling_thresh, min_blob_area, max_blob_area, min_blob_extent, tophat_selem, min_cell_area, max_cell_area, save_process_pics, count_hist, targetdirectory):
+def process_directory_relative_id(
+        flip,
+        gauss_blur_sigma,
+        window_thresh,
+        scaling_thresh,
+        min_blob_area,
+        max_blob_area,
+        min_blob_extent,
+        tophat_selem,
+        min_cell_area,
+        max_cell_area,
+        save_process_pics,
+        count_hist,
+        targetdirectory
+):
     version = '_v20200513'
     cwd = targetdirectory
     os.chdir(cwd)
@@ -381,7 +437,18 @@ def process_directory_relative_id(flip, gauss_blur_sigma, window_thresh, scaling
     images = glob.glob('./*.tif')
     images = [r[2:] for r in images]
     num_images = len(images)
-    cell_counts_df = pd.DataFrame(columns=['Folder_Name', 'Image_Name', 'Chamber_ID', 'Apt_Row', 'Apt_Col', 'Row_Dig_ID_Conf', 'Col_Dig_ID_Conf', 'Detected_Cells'])
+    cell_counts_df = pd.DataFrame(
+        columns=[
+            'Folder_Name',
+            'Image_Name',
+            'Chamber_ID',
+            'Apt_Row',
+            'Apt_Col',
+            'Row_Dig_ID_Conf',
+            'Col_Dig_ID_Conf',
+            'Detected_Cells'
+        ]
+    )
     num_chambers_detected = 0
     apartments_per_image = []
     for i in range(0, num_images):
@@ -392,13 +459,39 @@ def process_directory_relative_id(flip, gauss_blur_sigma, window_thresh, scaling
         if flip:
             raw_img = flip_horizontal(raw_img)
         os.chdir(save_path)
-        address_counts = get_chamber_cell_counts_bf(raw_img, img_name, gauss_blur_sigma, window_thresh, scaling_thresh, min_blob_area, max_blob_area, min_blob_extent, tophat_selem, min_cell_area, max_cell_area, save_process_pics)
+        address_counts = get_chamber_cell_counts_bf(
+            raw_img,
+            img_name,
+            gauss_blur_sigma,
+            window_thresh,
+            scaling_thresh,
+            min_blob_area,
+            max_blob_area,
+            min_blob_extent,
+            tophat_selem,
+            min_cell_area,
+            max_cell_area,
+            save_process_pics
+        )
         os.chdir('..')
         print(img_name + ': ' + str(len(address_counts)) + ' chambers counted')
         num_chambers_detected += len(address_counts)
         apartments_per_image.append(len(address_counts))
         for chamber_key in address_counts:
-            cell_counts_df = cell_counts_df.append({'Folder_Name': cwd, 'Image_Name': img_name, 'Chamber_ID': chamber_key, 'Apt_Row': address_counts[chamber_key][0], 'Apt_Col': address_counts[chamber_key][1], 'Row_Dig_ID_Conf': address_counts[chamber_key][2], 'Col_Dig_ID_Conf': address_counts[chamber_key][3], 'Detected_Cells': address_counts[chamber_key][4]}, ignore_index=True)
+            cell_counts_df = cell_counts_df.append(
+                {
+                    'Folder_Name': cwd,
+                    'Image_Name': img_name,
+                    'Chamber_ID': chamber_key,
+                    'Apt_Row': address_counts[chamber_key][0],
+                    'Apt_Col': address_counts[chamber_key][1],
+                    'Row_Dig_ID_Conf': address_counts[chamber_key][2],
+                    'Col_Dig_ID_Conf': address_counts[chamber_key][3],
+                    'Detected_Cells': address_counts[chamber_key][4]
+                },
+                ignore_index=True
+            )
+
     if count_hist == 1:
         os.chdir(save_path)
         plt.hist(cell_counts_df['Detected_Cells'], color='lightcoral', bins=35)
