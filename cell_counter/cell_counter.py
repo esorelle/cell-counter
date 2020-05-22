@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import cv2
 from datetime import datetime as dt
-from PIL import Image
 from scipy import stats
 from scipy import ndimage as ndi
 from skimage import filters, morphology, util
@@ -34,13 +33,6 @@ workflow_list = [
 ]
 apartment_workflow = ' -> '.join(workflow_list)
 cell_workflow = 'denoise -> norm -> tophat -> blur -> distance -> label -> centroids'
-
-# get contour of a single empty apartment for masking
-apt_ref_path = 'resources/apt_ref_2.tif'  # switch back to apt_ref.tif if needed
-apt_ref_mask = Image.open(apt_ref_path)
-apt_ref_mask = np.asarray(apt_ref_mask)
-apt_ref_c, _ = cv2.findContours(apt_ref_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-apt_ref_c = apt_ref_c[0]
 
 
 # new cell count method that uses chamber blobs to do direct gating
@@ -175,9 +167,9 @@ def get_chamber_cell_counts_bf(
         col_text_regions.append(img_rot[c_int_tup[1] - 71:c_int_tup[1] - 39, c_int_tup[0] - 97:c_int_tup[0] - 40])
 
         # apt region
-        apt_offset_x = c_int_tup[0] - apt_ref_mask.shape[1] + 44    # -10
-        apt_offset_y = c_int_tup[1] - apt_ref_mask.shape[0] + 5    # +45
-        apt_c = apt_ref_c + [apt_offset_x, apt_offset_y]
+        apt_offset_x = c_int_tup[0] - utils.apt_ref_mask.shape[1] + 44    # -10
+        apt_offset_y = c_int_tup[1] - utils.apt_ref_mask.shape[0] + 5    # +45
+        apt_c = utils.apt_ref_c + [apt_offset_x, apt_offset_y]
         cv2.circle(new_img, c_int_tup, 5, (60, 220, 60), -1)
         cv2.rectangle(new_img, row_rect_vert1, row_rect_vert2, (186, 85, 211), 2)
         cv2.rectangle(new_img, col_rect_vert1, col_rect_vert2, (190, 160, 65), 2)
