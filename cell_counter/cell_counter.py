@@ -35,7 +35,7 @@ apartment_workflow = ' -> '.join(workflow_list)
 cell_workflow = 'denoise -> norm -> tophat -> blur -> distance -> label -> centroids'
 
 # get contour of a single empty apartment for masking
-apt_ref_path = '../resources/apt_ref_2.tif'  # switch back to apt_ref.tif if needed
+apt_ref_path = 'resources/apt_ref_2.tif'  # switch back to apt_ref.tif if needed
 apt_ref_mask = Image.open(apt_ref_path)
 apt_ref_mask = np.asarray(apt_ref_mask)
 apt_ref_c, _ = cv2.findContours(apt_ref_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -43,7 +43,7 @@ apt_ref_c = apt_ref_c[0]
 
 dig_refs = []
 for i in range(10):
-    dig_ref = Image.open('../resources/dig_ref_%d.tif' % i)
+    dig_ref = Image.open('resources/dig_ref_%d.tif' % i)
     dig_ref = np.asarray(dig_ref)
     dig_refs.append(dig_ref)
 
