@@ -73,6 +73,7 @@ def identify_digit(dig_region):
     for i, dig_ref in enumerate(dig_refs):
         res = cv2.matchTemplate(dig_region_pad, dig_ref, cv2.TM_CCOEFF_NORMED)
         scores.append(res.max())
+
     if np.max(scores) > 0.6:
         return np.argmax(scores), np.max(scores)
     else:
@@ -94,24 +95,29 @@ def remove_large_objects(ar, max_size=64, connectivity=1, in_place=False):
         out = ar
     else:
         out = ar.copy()
+
     if out.dtype == bool:
         selem = ndi.generate_binary_structure(ar.ndim, connectivity)
         ccs = np.zeros_like(ar, dtype=np.int32)
         ndi.label(ar, selem, output=ccs)
     else:
         ccs = out
+
     try:
         component_sizes = np.bincount(ccs.ravel())
     except ValueError:
         raise ValueError("Negative value labels are not supported. Try "
                          "relabeling the input with `scipy.ndimage.label` or "
                          "`skimage.morphology.label`.")
+
     if len(component_sizes) == 2 and out.dtype != bool:
         warn("Only one label was provided to `remove_small_objects`. "
              "Did you mean to use a boolean array?")
+
     too_big = component_sizes > max_size
     too_big_mask = too_big[ccs]
     out[too_big_mask] = 0
+
     return out
 
 
@@ -135,16 +141,19 @@ def get_chamber_cell_counts_bf(
     back_map = filters.threshold_local(img_blur, window_thresh, offset=0)
     img_scaled = np.divide(img_blur, back_map) * 255
     img_8b = np.uint8(input_img / (2**8 + 1))   # new for rotational matrix calc
+
     edges_0 = (img_scaled < scaling_thresh)
     # 2,3 --> changed to 1,3 to reduce connectivity of dense cells
     # leading to false negative for very full apartments
     # while retaining connection of apartment entry points.
     edges_1 = morphology.dilation(edges_0, morphology.selem.rectangle(1, 4))
+
     blobs_0 = util.invert(edges_1)
     blobs_1 = remove_large_objects(blobs_0, max_blob_area)
     # 3,1 --> changed to 4,1 to increase blob grouping of dense cells as contiguous apartment
     blobs_2 = morphology.closing(blobs_1, morphology.selem.rectangle(5, 1))
     blobs_3 = np.zeros(np.shape(input_img))
+
     north, west, south, east = [], [], [], []
     true_north = []
 
@@ -167,6 +176,7 @@ def get_chamber_cell_counts_bf(
     blobs_6 = morphology.remove_small_objects(blobs_5, min_blob_area)
     blobs_7 = label(blobs_6, connectivity=2)
     refined_blobs = np.zeros(np.shape(input_img))
+
     north, west, south, east = [], [], [], []
     true_north = []
     for blob in regionprops(blobs_7):
@@ -193,6 +203,7 @@ def get_chamber_cell_counts_bf(
     c_centers = [(anchors_x[i], anchors_y[i]) for i in range(len(anchors_y))]
     assigned_idx = []
     centers_y = np.array(anchors_y)
+
     row_dist = 110  # rows are separated by roughly 220px
     rows = []
     for i, cy in enumerate(centers_y):
@@ -218,6 +229,7 @@ def get_chamber_cell_counts_bf(
     rot_mat = cv2.getRotationMatrix2D((n_cols/2., n_rows/2.), r_deg_mean, 1)
     img_rot = cv2.warpAffine(img_8b, rot_mat, (n_cols, n_rows))
     new_img = cv2.cvtColor(img_rot, cv2.COLOR_GRAY2RGB)
+
     row_text_regions = []
     row_numbers = []        # fill with read numbers
     row_num_avg_conf = []   # fill with mean score value from identify digits
@@ -225,17 +237,21 @@ def get_chamber_cell_counts_bf(
     col_numbers = []        # fill with read numbers
     col_num_avg_conf = []   # fill with mean score value from identify digits
     apartment_mask = np.zeros(np.shape(input_img))
+
     for c_center in c_centers:
         rot_c = rotate(c_center, origin=(n_cols/2., n_rows/2.), degrees=r_deg_mean)
         c_int_tup = tuple(np.round(rot_c).astype(np.int))
+
         # rect for row number
         row_rect_vert1 = (c_int_tup[0] + 44, c_int_tup[1] - 171)    # -10, -128
         row_rect_vert2 = (c_int_tup[0] + 95, c_int_tup[1] - 139)    # +40, -100
         row_text_regions.append(img_rot[c_int_tup[1] - 171:c_int_tup[1] - 139, c_int_tup[0] + 44:c_int_tup[0] + 95])
+
         # rect for col number
         col_rect_vert1 = (c_int_tup[0] - 97, c_int_tup[1] - 71)    # -148, -30
         col_rect_vert2 = (c_int_tup[0] - 40, c_int_tup[1] - 39)      # -98, -2
         col_text_regions.append(img_rot[c_int_tup[1] - 71:c_int_tup[1] - 39, c_int_tup[0] - 97:c_int_tup[0] - 40])
+
         # apt region
         apt_offset_x = c_int_tup[0] - apt_ref_mask.shape[1] + 44    # -10
         apt_offset_y = c_int_tup[1] - apt_ref_mask.shape[0] + 5    # +45
@@ -260,8 +276,10 @@ def get_chamber_cell_counts_bf(
                 digits = ['_', '_', '_']    # dummy numbering to prevent empty error
         else:
             digits = ['-Y', '-Y', '-Y']        # dummy numbering to prevent negative index error
+
         row_numbers.append(''.join(digits))
         row_num_avg_conf.append(np.mean(row_confs))
+
     for r in col_text_regions:
         if np.all(r > 0):
             r_split = np.split(r, 3, axis=1)
@@ -274,18 +292,21 @@ def get_chamber_cell_counts_bf(
                 digits = ['_', '_', '_']     # dummy numbering to prevent empty error
         else:
             digits = ['-X', '-X', '-X']         # dummy numbering to prevent negative index error
+
         col_numbers.append(''.join(digits))
         col_num_avg_conf.append(np.mean(col_confs))
 
     image_save_path = img_name + '_process_steps'
     os.mkdir(image_save_path)
     os.chdir(image_save_path)
+
     plt.figure(figsize=(10, 6))
     plt.imshow(new_img, cmap='gray', vmin=0, vmax=255)
     plt.title('apartment_and_address_overlay')
     plt.tight_layout()
     plt.savefig(img_name + 'apartment_and_address_overlay' + '.png')
     plt.close()
+
     os.chdir('..')
 
     # count the cells in each chamber
@@ -302,49 +323,59 @@ def get_chamber_cell_counts_bf(
     local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((11, 11)), labels=b3)
     markers = ndi.label(local_maxi)[0]
     labels = watershed(-distance, markers, mask=b3)
+
     # optional save of process step images
     if save_process_pics == 1:
         os.chdir(image_save_path)
+
         plt.imshow(edges_0, cmap='gray')
         plt.title('001_initial_edges')
         plt.tight_layout()
         plt.savefig(img_name + '001_initial_edges' + '.png')
         plt.close()
+
         plt.imshow(edges_1, cmap='gray')
         plt.title('002_dilated_edges')
         plt.tight_layout()
         plt.savefig(img_name + '002_dilated_edges' + '.png')
         plt.close()
+
         plt.imshow(blobs_0, cmap='gray')
         plt.title('003_initial_blobs')
         plt.tight_layout()
         plt.savefig(img_name + '003_initial_blobs' + '.png')
         plt.close()
+
         plt.imshow(blobs_1, cmap='gray')
         plt.title('004_max_area_filtered_blobs')
         plt.tight_layout()
         plt.savefig(img_name + '004_max_area_filtered_blobs' + '.png')
         plt.close()
+
         plt.imshow(blobs_2, cmap='gray')
         plt.title('005_closed_blobs')
         plt.tight_layout()
         plt.savefig(img_name + '005_closed_blobs' + '.png')
         plt.close()
+
         plt.imshow(blobs_4, cmap='gray')
         plt.title('006_extent_filtered_opened_blobs')
         plt.tight_layout()
         plt.savefig(img_name + '006_extent_filtered_opened_blobs' + '.png')
         plt.close()
+
         plt.imshow(blobs_6, cmap='gray')
         plt.title('007_min_area_filtered_blobs')
         plt.tight_layout()
         plt.savefig(img_name + '007_min_area_filtered_blobs' + '.png')
         plt.close()
+
         plt.imshow(blobs_7, cmap='nipy_spectral')
         plt.title('008_labeled_proto_chambers')
         plt.tight_layout()
         plt.savefig(img_name + '008_labeled_proto_chambers' + '.png')
         plt.close()
+
         plt.imshow(label(refined_blobs, connectivity=2), cmap='nipy_spectral')
         plt.title('009_labeled_refined_chambers')
         plt.tight_layout()
@@ -352,10 +383,12 @@ def get_chamber_cell_counts_bf(
         plt.close()
 
         os.chdir('..')
+
     # show detected centroids overlay on input image
     fig, ax = plt.subplots(figsize=(10, 6))
     # subbed new_img for input_img to show detected apartment and text regions
     ax.imshow(new_img, cmap='gray')
+
     x_coords, y_coords = [], []
     for region in regionprops(labels):
         if min_cell_area < region.area < max_cell_area:
@@ -364,11 +397,13 @@ def get_chamber_cell_counts_bf(
                 y_coords.append(int(np.round(cent_x)))
                 x_coords.append(int(np.round(cent_y)))
                 ax.scatter(cent_y, cent_x, s=4, c='lightcoral', marker='x')
+
     ax.set_axis_off()
     plt.title('#_of_detected_cells_in_image = ' + str(len(x_coords)))
     plt.tight_layout()
     plt.savefig(img_name + '_detected_cells' + '.png')
     plt.close()
+
     # tabulate the counted cells by chamber for output
     prefix = img_name[img_name.find('ST_'):img_name.find('ST_') + 14] + '_CHAMBER_'
     address_counts = {}
@@ -378,6 +413,7 @@ def get_chamber_cell_counts_bf(
             if west[c] < x_coords[p] < east[c]:
                 if south[c] - 212 < y_coords[p] < south[c]-15:
                     chamber_cell_count_array[c] += 1
+
     for chamber in range(len(chamber_cell_count_array)):
         if chamber < 9:
             address_counts[prefix + '00' + str(chamber + 1)] = [
@@ -395,6 +431,7 @@ def get_chamber_cell_counts_bf(
                 col_num_avg_conf[chamber],
                 int(chamber_cell_count_array[chamber])
             ]
+
     return address_counts
 
 
@@ -422,6 +459,7 @@ def process_directory_relative_id(
     images = glob.glob('./*.tif')
     images = [r[2:] for r in images]
     num_images = len(images)
+
     cell_counts_df = pd.DataFrame(
         columns=[
             'Folder_Name',
@@ -436,6 +474,7 @@ def process_directory_relative_id(
     )
     num_chambers_detected = 0
     apartments_per_image = []
+
     for i in range(0, num_images):
         img_name = images[i]
         print(i, img_name)
@@ -443,7 +482,9 @@ def process_directory_relative_id(
         raw_img = plt.imread(img_name)
         if flip:
             raw_img = flip_horizontal(raw_img)
+
         os.chdir(save_path)
+
         address_counts = get_chamber_cell_counts_bf(
             raw_img,
             img_name,
@@ -458,8 +499,11 @@ def process_directory_relative_id(
             max_cell_area,
             save_process_pics
         )
+
         os.chdir('..')
+
         print(img_name + ': ' + str(len(address_counts)) + ' chambers counted')
+
         num_chambers_detected += len(address_counts)
         apartments_per_image.append(len(address_counts))
         for chamber_key in address_counts:
@@ -479,6 +523,7 @@ def process_directory_relative_id(
 
     if count_hist == 1:
         os.chdir(save_path)
+
         plt.hist(cell_counts_df['Detected_Cells'], color='lightcoral', bins=35)
         plt.title('summary_cell_count_histogram')
         plt.xlabel('number_of_detected_cells')
@@ -486,6 +531,7 @@ def process_directory_relative_id(
         plt.tight_layout()
         plt.savefig('_summary_cell_count_histogram' + '.png')
         plt.close()
+
         plt.hist(apartments_per_image, color='dodgerblue', bins=18)
         plt.title('apartments_per_image_in_directory')
         plt.xlabel('number_of_detected_apartments')
@@ -493,9 +539,13 @@ def process_directory_relative_id(
         plt.tight_layout()
         plt.savefig('_summary_apartment_count_histogram' + '.png')
         plt.close()
+
         os.chdir('..')
+
     os.chdir(save_path)
+
     cell_counts_df.to_csv('_directory_cell_counts_relative_chamber_id' + version + '.csv')
+
     naive_chamber_id_rate = np.around(num_chambers_detected / (num_images * 24), decimals=4)
     metadata = open('analysis_metadata.txt', 'w')
     metadata.write('data_location: ' + targetdirectory + '\n')
@@ -508,14 +558,17 @@ def process_directory_relative_id(
         metadata.write('\n' + 'image_flip: True')
     else:
         metadata.write('\n' + 'image_flip: False')
+
     if save_process_pics == 0:
         metadata.write('\n' + 'save_processing_pics: False')
     else:
         metadata.write('\n' + 'save_processing_pics: True')
+
     if count_hist == 0:
         metadata.write('\n' + 'directory_chamber_cell_count_histogram: False')
     else:
         metadata.write('\n' + 'directory_chamber_cell_count_histogram: True' + '\n')
+
     metadata.write('\n')
     metadata.write('# of images analyzed: ' + str(num_images) + '\n')
     metadata.write('total # of chambers detected: ' + str(num_chambers_detected) + '\n')
@@ -531,6 +584,9 @@ def process_directory_relative_id(
     metadata.write('min_cell_area: ' + str(min_cell_area) + '\n')
     metadata.write('max_cell_area: ' + str(max_cell_area) + '\n')
     metadata.close()
+
     os.chdir('..')
+
     print("Naive chamber detection rate for chip: " + str(naive_chamber_id_rate * 100) + '%')
+
     return cell_counts_df
