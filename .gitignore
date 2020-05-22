@@ -1,0 +1,5 @@
+.idea
+venv
+preprocessing
+*.png
+*.pyc
