@@ -186,10 +186,10 @@ def get_chamber_cell_counts_bf(
 
     single_digits = []
     for r in row_text_regions:
+        row_confs = []
         if np.all(r > 0):                   # test any negative indices due to edge of image
             r_split = np.split(r, 3, axis=1)
             digits = []
-            row_confs = []
             for sub_r in r_split:
                 single_digits.append(sub_r)
                 digits.append(str(utils.identify_digit(sub_r)[0]))
@@ -203,10 +203,10 @@ def get_chamber_cell_counts_bf(
         row_num_avg_conf.append(np.mean(row_confs))
 
     for r in col_text_regions:
+        col_confs = []
         if np.all(r > 0):
             r_split = np.split(r, 3, axis=1)
             digits = []
-            col_confs = []
             for sub_r in r_split:           # test any negative indices due to edge of image
                 digits.append(str(utils.identify_digit(sub_r)[0]))
                 col_confs.append(utils.identify_digit(sub_r)[1])
