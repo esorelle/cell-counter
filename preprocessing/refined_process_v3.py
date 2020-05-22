@@ -12,13 +12,14 @@ from skimage import filters, morphology, util
 from skimage.measure import label, regionprops
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
+from warnings import warn
 
 
 apartment_workflow = 'denoise -> norm -> edges -> dilate -> invert -> maxout -> close -> extentout -> open -> minout -> label -> borderout -> de-rotate -> apartment_mask -> read_digits'
 cell_workflow = 'denoise -> norm -> tophat -> blur -> distance -> label -> centroids'
 
 # get contour of a single empty apartment for masking
-apt_ref_path = 'apt_ref_2.tif'      # switch back to apt_ref.tif if needed
+apt_ref_path = '../resources/apt_ref_2.tif'  # switch back to apt_ref.tif if needed
 apt_ref_mask = Image.open(apt_ref_path)
 apt_ref_mask = np.asarray(apt_ref_mask)
 apt_ref_c, _ = cv2.findContours(apt_ref_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -26,7 +27,7 @@ apt_ref_c = apt_ref_c[0]
 
 dig_refs = []
 for i in range(10):
-    dig_ref = Image.open('dig_ref_%d.tif' % i)
+    dig_ref = Image.open('../resources/dig_ref_%d.tif' % i)
     dig_ref = np.asarray(dig_ref)
     dig_refs.append(dig_ref)
 
@@ -50,7 +51,8 @@ def rotate(point, origin=(0, 0), degrees=0):
 # identify digits from templates
 def identify_digit(dig_region):
     # padding is crucial & needs to be about 1/2  of the template width/height
-    dig_region_pad = np.pad(dig_region, 10, mode='constant', constant_values = (128, 128))      # changes from median padding to avoid error...see if this works
+    # changes from median padding to avoid error...see if this works
+    dig_region_pad = np.pad(dig_region, 10, mode='constant', constant_values=(128, 128))
     scores = []
     for i, dig_ref in enumerate(dig_refs):
         res = cv2.matchTemplate(dig_region_pad, dig_ref, cv2.TM_CCOEFF_NORMED)
@@ -105,25 +107,29 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
     img_scaled = np.divide(img_blur, back_map) * 255
     img_8b = np.uint8(input_img / (2**8 + 1))   # new for rotational matrix calc
     edges_0 = (img_scaled < scaling_thresh)
-    edges_1 = morphology.dilation(edges_0, morphology.selem.rectangle(1,4)) #2,3 --> changed to 1,3 to reduce connectivity of dense cells leading to false negative for very full apartments while retaining connection of apartment entry points.
+    # 2,3 --> changed to 1,3 to reduce connectivity of dense cells
+    # leading to false negative for very full apartments
+    # while retaining connection of apartment entry points.
+    edges_1 = morphology.dilation(edges_0, morphology.selem.rectangle(1, 4))
     blobs_0 = util.invert(edges_1)
     blobs_1 = remove_large_objects(blobs_0, max_blob_area)
-    blobs_2 = morphology.closing(blobs_1, morphology.selem.rectangle(5,1)) #3,1 --> changed to 4,1 to increase blob grouping of dense cells as contiguous apartment
+    # 3,1 --> changed to 4,1 to increase blob grouping of dense cells as contiguous apartment
+    blobs_2 = morphology.closing(blobs_1, morphology.selem.rectangle(5, 1))
     blobs_3 = np.zeros(np.shape(input_img))
     N, W, S, E = [], [], [], []
     true_N = []
     for blob in regionprops(label(blobs_2)):
         if blob.extent > min_blob_extent:
             _N, _W, _S, _E = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
-            if np.logical_and(70 < _E - _W < 100, 180 < _S - _N < 240):         # new condition based on bounding box dimensions -- remove if needed
+            # new condition based on bounding box dimensions -- remove if needed
+            if np.logical_and(70 < _E - _W < 100, 180 < _S - _N < 240):
                 N.append(_N)
                 W.append(_W - 3)
                 S.append(_S)
                 E.append(_E + 3)
                 true_N.append(_S - 212)
                 hull = blob.convex_image
-                blobs_3[_N:_S,_W:_E] = hull
-
+                blobs_3[_N:_S, _W:_E] = hull
 
     blobs_4 = morphology.opening(blobs_3, morphology.selem.disk(3))
     blobs_5 = blobs_4 > 0
@@ -133,7 +139,8 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
     N, W, S, E = [], [], [], []
     true_N = []
     for blob in regionprops(blobs_7):
-        if abs(blob.centroid[0] - np.shape(input_img)[0]) > 70 and blob.centroid[0] > 70:       # edge borded of image -- was 50 pixels
+        # edge border of image -- was 50 pixels
+        if abs(blob.centroid[0] - np.shape(input_img)[0]) > 70 and blob.centroid[0] > 70:
             if abs(blob.centroid[1] - np.shape(input_img)[1]) > 70 and blob.centroid[1] > 70:
                 _N, _W, _S, _E = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
                 N.append(_N)
@@ -142,7 +149,7 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
                 E.append(_E + 3)
                 true_N.append(_S - 212)
                 hull = blob.convex_image
-                refined_blobs[_N:_S,_W:_E] = hull
+                refined_blobs[_N:_S, _W:_E] = hull
 
     # make rectangles (or insert chamber polygon ndarray with reference to anchor point)
     rect_mask = np.zeros(np.shape(input_img))
@@ -188,7 +195,6 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
     col_text_regions = []
     col_numbers = []        # fill with read numbers
     col_num_avg_conf = []   # fill with mean score value from identify digits
-    apt_regions = []
     apartment_mask = np.zeros(np.shape(input_img))
     for c_center in c_centers:
         rot_c = rotate(c_center, origin=(n_cols/2., n_rows/2.), degrees=r_deg_mean)
@@ -205,10 +211,10 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
         apt_offset_x = c_int_tup[0] - apt_ref_mask.shape[1] + 44    # -10
         apt_offset_y = c_int_tup[1] - apt_ref_mask.shape[0] + 5    # +45
         apt_c = apt_ref_c + [apt_offset_x, apt_offset_y]
-        cv2.circle(new_img, c_int_tup, 5, (60, 220, 60), -1)                        # (60, 220, 60) is close to lime green
-        cv2.rectangle(new_img, row_rect_vert1, row_rect_vert2, (186, 85, 211), 2)   # (186, 85, 211) is 'mediumorchid'
-        cv2.rectangle(new_img, col_rect_vert1, col_rect_vert2, (190, 160, 65), 2)   # (200, 120, 65) is close to yellow
-        cv2.drawContours(new_img, [apt_c], 0, (65, 105, 255), 2)                    # (65, 105, 255) is 'royalblue'
+        cv2.circle(new_img, c_int_tup, 5, (60, 220, 60), -1)
+        cv2.rectangle(new_img, row_rect_vert1, row_rect_vert2, (186, 85, 211), 2)
+        cv2.rectangle(new_img, col_rect_vert1, col_rect_vert2, (190, 160, 65), 2)
+        cv2.drawContours(new_img, [apt_c], 0, (65, 105, 255), 2)
         cv2.drawContours(apartment_mask, [apt_c], 0, (255, 255, 255), -1)
         # save apartment_mask for filtering cell counts
         # apt_regions.append(apt_c)
@@ -244,7 +250,6 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
         col_numbers.append(''.join(digits))
         col_num_avg_conf.append(np.mean(col_confs))
 
-    analysis_folder = os.getcwd()
     image_save_path = img_name + '_process_steps'
     os.mkdir(image_save_path)
     os.chdir(image_save_path)
@@ -331,7 +336,8 @@ def get_chamber_cell_counts_bf(input_img, img_name, gauss_blur_sigma, window_thr
         os.chdir('..')
     # show detected centroids overlay on input image
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.imshow(new_img, cmap='gray')             # subbed new_img for input_img to show detected apartment and text regions
+    # subbed new_img for input_img to show detected apartment and text regions
+    ax.imshow(new_img, cmap='gray')
     # for i in range(len(true_N)):
     #     patch = mpatches.Rectangle((W[i],S[i]), E[i] - W[i], -212, fill=False, edgecolor='dodgerblue', linewidth=2)
     #     ax.add_patch(patch)
@@ -375,14 +381,15 @@ def process_directory_relative_id(flip, gauss_blur_sigma, window_thresh, scaling
     images = glob.glob('./*.tif')
     images = [r[2:] for r in images]
     num_images = len(images)
-    cell_counts_df = pd.DataFrame(columns = ['Folder_Name', 'Image_Name', 'Chamber_ID', 'Apt_Row', 'Apt_Col', 'Row_Dig_ID_Conf', 'Col_Dig_ID_Conf', 'Detected_Cells'])
+    cell_counts_df = pd.DataFrame(columns=['Folder_Name', 'Image_Name', 'Chamber_ID', 'Apt_Row', 'Apt_Col', 'Row_Dig_ID_Conf', 'Col_Dig_ID_Conf', 'Detected_Cells'])
     num_chambers_detected = 0
     apartments_per_image = []
-    for i in range(0,num_images):
+    for i in range(0, num_images):
         img_name = images[i]
         print(i, img_name)
+
         raw_img = plt.imread(img_name)
-        if flip == True:
+        if flip:
             raw_img = flip_horizontal(raw_img)
         os.chdir(save_path)
         address_counts = get_chamber_cell_counts_bf(raw_img, img_name, gauss_blur_sigma, window_thresh, scaling_thresh, min_blob_area, max_blob_area, min_blob_extent, tophat_selem, min_cell_area, max_cell_area, save_process_pics)
@@ -391,7 +398,7 @@ def process_directory_relative_id(flip, gauss_blur_sigma, window_thresh, scaling
         num_chambers_detected += len(address_counts)
         apartments_per_image.append(len(address_counts))
         for chamber_key in address_counts:
-            cell_counts_df = cell_counts_df.append({'Folder_Name': cwd, 'Image_Name': img_name, 'Chamber_ID': chamber_key, 'Apt_Row': address_counts[chamber_key][0], 'Apt_Col': address_counts[chamber_key][1], 'Row_Dig_ID_Conf': address_counts[chamber_key][2], 'Col_Dig_ID_Conf': address_counts[chamber_key][3],'Detected_Cells': address_counts[chamber_key][4]}, ignore_index=True)
+            cell_counts_df = cell_counts_df.append({'Folder_Name': cwd, 'Image_Name': img_name, 'Chamber_ID': chamber_key, 'Apt_Row': address_counts[chamber_key][0], 'Apt_Col': address_counts[chamber_key][1], 'Row_Dig_ID_Conf': address_counts[chamber_key][2], 'Col_Dig_ID_Conf': address_counts[chamber_key][3], 'Detected_Cells': address_counts[chamber_key][4]}, ignore_index=True)
     if count_hist == 1:
         os.chdir(save_path)
         plt.hist(cell_counts_df['Detected_Cells'], color='lightcoral', bins=35)
@@ -418,7 +425,8 @@ def process_directory_relative_id(flip, gauss_blur_sigma, window_thresh, scaling
     metadata.write('version: ' + version + '\n' + '\n')
     metadata.write('apartment-finding method: ' + apartment_workflow + '\n')
     metadata.write('cell-counting method: ' + cell_workflow + '\n')
-    if flip == True:
+
+    if flip:
         metadata.write('\n' + 'image_flip: True')
     else:
         metadata.write('\n' + 'image_flip: False')
