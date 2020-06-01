@@ -6,12 +6,12 @@ from warnings import warn
 
 dig_refs = []
 for _ref_digit in range(10):
-    dig_ref = Image.open('resources/dig_ref_%d.tif' % _ref_digit)
+    dig_ref = Image.open('cell-counter/resources/dig_ref_%d.tif' % _ref_digit)
     dig_ref = np.asarray(dig_ref)
     dig_refs.append(dig_ref)
 
 # get contour of a single empty apartment for masking
-apt_ref_path = 'resources/apt_ref_2.tif'  # switch back to apt_ref.tif if needed
+apt_ref_path = 'cell-counter/resources/apt_ref_2.tif'  # switch back to apt_ref.tif if needed
 apt_ref_mask = Image.open(apt_ref_path)
 apt_ref_mask = np.asarray(apt_ref_mask)
 apt_ref_c, _ = cv2.findContours(apt_ref_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
