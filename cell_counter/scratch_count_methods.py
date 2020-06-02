@@ -4,37 +4,6 @@ from sklearn.feature_extraction import image as sk_image
 import matplotlib.pyplot as plt
 import cv2
 
-mask = np.load('cell-counter/cell_counter/test_apt_mask.npy')
-img = np.load('cell-counter/cell_counter/test_scaled_img.npy')
-gate = np.load('cell-counter/cell_counter/test_thresh_gated_cells.npy')
-gate = gate.astype(np.uint8)
-
-contour_tree, hierarchy = cv2.findContours(
-    gate.astype(np.uint8),
-    cv2.RETR_CCOMP,
-    cv2.CHAIN_APPROX_SIMPLE
-)
-
-filtered_contours = []
-for contour in contour_tree:
-    area = cv2.contourArea(contour)
-    if 15 < area < 300:
-        filtered_contours.append(contour)
-
-print(len(contour_tree))
-print(len(filtered_contours))
-
-# image = cv2.imread('cell-counter/cell_counter/BF_ST_080_APT_004_20190315115128.tif')
-# image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-# cv2.namedWindow("cell contours", cv2.WINDOW_NORMAL)
-# cv2.drawContours(image, filtered_contours, -1, (0,255,0), 1)
-# cv2.imshow("cell contours", image)
-# cv2.waitKey(0)
-
-
-
-
-
 
 def split_multi_cell(signal_img, multi_cell_mask, max_cell_area, plot=False):
     contour_tree, hierarchy = cv2.findContours(
@@ -111,3 +80,35 @@ def split_multi_cell(signal_img, multi_cell_mask, max_cell_area, plot=False):
                 split_multi_cell(signal_img, new_mask, max_cell_area, plot=plot)
             )
     return single_cell_contours
+
+
+
+
+
+
+mask = np.load('cell-counter/cell_counter/test_apt_mask.npy')
+img = np.load('cell-counter/cell_counter/test_scaled_img.npy')
+gate = np.load('cell-counter/cell_counter/test_thresh_gated_cells.npy')
+gate = gate.astype(np.uint8)
+
+contour_tree, hierarchy = cv2.findContours(
+    gate.astype(np.uint8),
+    cv2.RETR_CCOMP,
+    cv2.CHAIN_APPROX_SIMPLE
+)
+
+filtered_contours = []
+for contour in contour_tree:
+    area = cv2.contourArea(contour)
+    if 15 < area < 300:
+        filtered_contours.append(contour)
+
+print(len(contour_tree))
+print(len(filtered_contours))
+
+# image = cv2.imread('cell-counter/cell_counter/BF_ST_080_APT_004_20190315115128.tif')
+# image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+# cv2.namedWindow("cell contours", cv2.WINDOW_NORMAL)
+# cv2.drawContours(image, filtered_contours, -1, (0,255,0), 1)
+# cv2.imshow("cell contours", image)
+# cv2.waitKey(0)

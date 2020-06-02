@@ -3,6 +3,10 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage as ndi
 from warnings import warn
+from sklearn.cluster import spectral_clustering
+from sklearn.feature_extraction import image as sk_image
+import matplotlib.pyplot as plt
+
 
 dig_refs = []
 for _ref_digit in range(10):
@@ -83,3 +87,80 @@ def remove_large_objects(ar, max_size=64, connectivity=1, in_place=False):
     too_big_mask = too_big[ccs]
     out[too_big_mask] = 0
     return out
+
+
+def split_multi_cell(signal_img, multi_cell_mask, max_cell_area, plot=False):
+    contour_tree, hierarchy = cv2.findContours(
+        multi_cell_mask.astype(np.uint8),
+        cv2.RETR_CCOMP,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+    single_cell_contours = []
+    sub_multi_contours_idx = []
+    for c_idx, sub_c in enumerate(contour_tree):
+        h = hierarchy[0][c_idx]
+        if h[3] != -1:
+            # it's a child contour, ignore it
+            continue
+        sub_c_area = cv2.contourArea(sub_c)
+        if sub_c_area < max_cell_area * .5:
+            # too small, some kind of fragment
+            continue
+        elif sub_c_area > max_cell_area * 1.2:
+            # too big for a single cell, try to split it
+            sub_multi_contours_idx.append(c_idx)
+        else:
+            # just right, probably a cell so save it
+            single_cell_contours.append(sub_c)
+            if plot:
+                sc_mask = np.zeros(signal_img.shape, dtype=np.uint8)
+                cv2.drawContours(
+                    sc_mask,
+                    [sub_c],
+                    -1,
+                    255,
+                    cv2.FILLED
+                )
+                plt.figure(figsize=(16, 16))
+                plt.imshow(sc_mask)
+                plt.axis('off')
+                plt.show()
+    for c_idx in sub_multi_contours_idx:
+        mc_mask = np.zeros(signal_img.shape, dtype=np.uint8)
+        cv2.drawContours(
+            mc_mask,
+            contour_tree,
+            c_idx,
+            255,
+            cv2.FILLED,
+            hierarchy=hierarchy
+        )
+        # Convert the image into a graph with the value of the gradient on the
+        # edges.
+        region_graph = sk_image.img_to_graph(
+            signal_img,
+            mask=mc_mask.astype(np.bool)
+        )
+        # Take a decreasing function of the gradient: we take it weakly
+        # dependent from the gradient the segmentation is close to a voronoi
+        region_graph.data = np.exp(-region_graph.data / region_graph.data.std())
+        n_clusters = 2
+        labels = spectral_clustering(
+            region_graph,
+            n_clusters=n_clusters,
+            eigen_solver='arpack',
+            n_init=10
+        )
+        label_im = np.full(mc_mask.shape, -1.)
+        label_im[mc_mask.astype(np.bool)] = labels
+        if plot:
+            plt.figure(figsize=(16, 16))
+            plt.imshow(label_im)
+            plt.axis('off')
+            plt.show()
+        for label in range(n_clusters):
+            new_mask = label_im == label
+            single_cell_contours.extend(
+                split_multi_cell(signal_img, new_mask, max_cell_area, plot=plot)
+            )
+    return single_cell_contours

@@ -108,7 +108,7 @@ def get_chamber_cell_counts_bf(
     # make rectangles (or insert chamber polygon ndarray with reference to anchor point)
     rect_mask = np.zeros(np.shape(input_img))
     for i in range(len(true_north)):
-        rect_mask[south[i]-212:south[i], west[i]-5:east[i]+5] = 1
+        rect_mask[south[i]-216:south[i], west[i]-5:east[i]+5] = 1
 
     # de-rotate the image by finding chamber row angles and correcting
     anchors_x = [np.int(np.round((east[i] + west[i]) / 2)) for i in range(len(east))]
@@ -150,6 +150,7 @@ def get_chamber_cell_counts_bf(
     col_numbers = []        # fill with read numbers
     col_num_avg_conf = []   # fill with mean score value from identify digits
     apartment_mask = np.zeros(np.shape(input_img))
+    ordered_apartments = []
 
     for c_center in c_centers:
         rot_c = utils.rotate(c_center, origin=(n_cols/2., n_rows/2.), degrees=r_deg_mean)
@@ -169,6 +170,7 @@ def get_chamber_cell_counts_bf(
         apt_offset_x = c_int_tup[0] - utils.apt_ref_mask.shape[1] + 44    # -10
         apt_offset_y = c_int_tup[1] - utils.apt_ref_mask.shape[0] + 5    # +45
         apt_c = utils.apt_ref_c + [apt_offset_x, apt_offset_y]
+        ordered_apartments.append(apt_c)
         cv2.circle(new_img, c_int_tup, 5, (60, 220, 60), -1)
         cv2.rectangle(new_img, row_rect_vert1, row_rect_vert2, (186, 85, 211), 2)
         cv2.rectangle(new_img, col_rect_vert1, col_rect_vert2, (190, 160, 65), 2)
@@ -330,12 +332,8 @@ def get_chamber_cell_counts_bf(
 
     ### CONTOUR COUNTING (2020-06-02) ###
     chamber_cell_count_array_contours = []
-    plt.imshow(rect_mask)
-    plt.show()
     gate_img = img_scaled * rect_mask  # changed from apartment_mask to better detect cells on apt edges
     gate_img = gate_img > 1.01  # 260 for apartment_mask, 1.01 for rect_mask
-    plt.imshow(gate_img)
-    plt.show()
     contour_tree, hierarchy = cv2.findContours(
         gate_img.astype(np.uint8),
         cv2.RETR_CCOMP,
@@ -353,19 +351,39 @@ def get_chamber_cell_counts_bf(
     apt_blobs = label(apt_blobs)  # revert to label(apartment_mask) if no dilation
     contour_points = []
 
-    for i, apt in enumerate(regionprops(apt_blobs)):
-        apt_coords = [tuple(j) for j in apt.coords]
-        for c in filtered_contours:
-            M = cv2.moments(c)
-            cx = int(M['m10']/M['m00'])
-            cy = int(M['m01']/M['m00'])
-            test_point = tuple([cy, cx])
-            if test_point in apt_coords:
-                chamber_cell_count_array_contours[i] += 1
-                contour_points.append(test_point)  # use for scatter plot of counted cells
+    for apt in range(len(ordered_apartments)):
+        temp_mask = np.zeros(np.shape(input_img))
+        cv2.drawContours(temp_mask, [ordered_apartments[apt]], 0, (255, 255, 255), -1)
+        temp_roi = label(temp_mask)
+        # plt.imshow(temp_roi)
+        # plt.show()
+        for blob in regionprops(temp_roi):
+            temp_roi_coords = [tuple(j) for j in blob.coords]
+            for c in filtered_contours:
+                M = cv2.moments(c)
+                cx = int(M['m10']/M['m00'])
+                cy = int(M['m01']/M['m00'])
+                test_point = tuple([cy, cx])
+                if test_point in temp_roi_coords:
+                    chamber_cell_count_array_contours[apt] += 1
+                    contour_points.append(test_point)  # use for scatter plot of counted cells
 
-    chamber_cell_count_array_contours = chamber_cell_count_array_contours.tolist()
-    chamber_cell_count_array_contours = [int(count) for count in chamber_cell_count_array_contours]
+        chamber_cell_count_array_contours = [int(count) for count in chamber_cell_count_array_contours]
+
+
+    # for i, apt in enumerate(regionprops(apt_blobs)):
+    #     apt_coords = [tuple(j) for j in apt.coords]
+    #     for c in filtered_contours:
+    #         M = cv2.moments(c)
+    #         cx = int(M['m10']/M['m00'])
+    #         cy = int(M['m01']/M['m00'])
+    #         test_point = tuple([cy, cx])
+    #         if test_point in apt_coords:
+    #             chamber_cell_count_array_contours[i] += 1
+    #             contour_points.append(test_point)  # use for scatter plot of counted cells
+    #
+    # chamber_cell_count_array_contours = chamber_cell_count_array_contours.tolist()
+    # chamber_cell_count_array_contours = [int(count) for count in chamber_cell_count_array_contours]
 
     fig, ax = plt.subplots(figsize=(10, 6))
     # subbed new_img for input_img to show detected apartment and text regions
@@ -379,7 +397,39 @@ def get_chamber_cell_counts_bf(
     plt.tight_layout()
     plt.savefig(img_name + '_detected_cell_contours' + '.png')
     plt.close()
-    ### END CONTOUR COUNTING###
+    ### END CONTOUR COUNTING ###
+
+
+    ### SPECTRAL CLUSTER MULTI CELL SPLITTING (SCOTT'S LUNGMAP METHOD) ###
+    # split_cell_contours = utils.split_multi_cell(input_img, gate_img, max_cell_area, plot=False)
+    # print('# contours from spectral clustering: ', len(split_cell_contours))
+    #
+    # cell_split_points = []
+    #
+    # for i, apt in enumerate(regionprops(apt_blobs)):
+    #     apt_coords = [tuple(j) for j in apt.coords]
+    #     for c in split_cell_contours:
+    #         M = cv2.moments(c)
+    #         cx = int(M['m10']/M['m00'])
+    #         cy = int(M['m01']/M['m00'])
+    #         test_point = tuple([cy, cx])
+    #         if test_point in apt_coords:
+    #             chamber_cell_count_array_contours[i] += 1
+    #             cell_split_points.append(test_point)  # use for scatter plot of counted cells
+    #
+    # fig, ax = plt.subplots(figsize=(10, 6))
+    # # subbed new_img for input_img to show detected apartment and text regions
+    # ax.imshow(new_img, cmap='gray')
+    #
+    # for point in cell_split_points:
+    #     ax.scatter(point[1], point[0], s=4, c='lightcoral', marker='x')
+    #
+    # ax.set_axis_off()
+    # plt.title('#_of_detected_cell_contours_in_image = ' + str(len(cell_split_points)))
+    # plt.tight_layout()
+    # plt.savefig(img_name + '_detected_split_cells' + '.png')
+    # plt.close()
+    ### END SPECTRAL CLUSTER SPLITTING ###
 
 
     for chamber in range(len(chamber_cell_count_array)):
@@ -389,7 +439,8 @@ def get_chamber_cell_counts_bf(
                 str(col_numbers[chamber]),
                 row_num_avg_conf[chamber],
                 col_num_avg_conf[chamber],
-                int(chamber_cell_count_array[chamber])
+                int(chamber_cell_count_array[chamber]),
+                chamber_cell_count_array_contours[chamber]
             ]
         else:
             address_counts[prefix + '0' + str(chamber + 1)] = [
@@ -397,7 +448,8 @@ def get_chamber_cell_counts_bf(
                 str(col_numbers[chamber]),
                 row_num_avg_conf[chamber],
                 col_num_avg_conf[chamber],
-                int(chamber_cell_count_array[chamber])
+                int(chamber_cell_count_array[chamber]),
+                chamber_cell_count_array_contours[chamber]
             ]
 
     return address_counts
@@ -437,7 +489,8 @@ def process_directory_relative_id(
             'Apt_Col',
             'Row_Dig_ID_Conf',
             'Col_Dig_ID_Conf',
-            'Detected_Cells'
+            'Tophat_Cell_Count',
+            'Contour_Cell_Count'
         ]
     )
     num_chambers_detected = 0
@@ -484,7 +537,8 @@ def process_directory_relative_id(
                     'Apt_Col': address_counts[chamber_key][1],
                     'Row_Dig_ID_Conf': address_counts[chamber_key][2],
                     'Col_Dig_ID_Conf': address_counts[chamber_key][3],
-                    'Detected_Cells': address_counts[chamber_key][4]
+                    'Tophat_Cell_Count': address_counts[chamber_key][4],
+                    'Contour_Cell_Count': address_counts[chamber_key][5]
                 },
                 ignore_index=True
             )
@@ -492,12 +546,20 @@ def process_directory_relative_id(
     if count_hist == 1:
         os.chdir(save_path)
 
-        plt.hist(cell_counts_df['Detected_Cells'], color='lightcoral', bins=35)
-        plt.title('summary_cell_count_histogram')
+        plt.hist(cell_counts_df['Tophat_Cell_Count'], color='lightcoral', bins=35)
+        plt.title('tophat_cell_count_histogram')
         plt.xlabel('number_of_detected_cells')
         plt.ylabel('number_of_chambers_on_chip')
         plt.tight_layout()
-        plt.savefig('_summary_cell_count_histogram' + '.png')
+        plt.savefig('_tophat_cell_count_histogram' + '.png')
+        plt.close()
+
+        plt.hist(cell_counts_df['Contour_Cell_Count'], color='mediumseagreen', bins=35)
+        plt.title('contour_cell_count_histogram')
+        plt.xlabel('number_of_detected_cells')
+        plt.ylabel('number_of_chambers_on_chip')
+        plt.tight_layout()
+        plt.savefig('_contour_cell_count_histogram' + '.png')
         plt.close()
 
         plt.hist(apartments_per_image, color='dodgerblue', bins=18)
