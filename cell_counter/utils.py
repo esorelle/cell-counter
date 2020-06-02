@@ -43,7 +43,6 @@ def identify_digit(dig_region):
     for i, ref_digit in enumerate(dig_refs):
         res = cv2.matchTemplate(dig_region_pad, ref_digit, cv2.TM_CCOEFF_NORMED)
         scores.append(res.max())
-
     if np.max(scores) > 0.6:
         return np.argmax(scores), np.max(scores)
     else:
@@ -65,27 +64,22 @@ def remove_large_objects(ar, max_size=64, connectivity=1, in_place=False):
         out = ar
     else:
         out = ar.copy()
-
     if out.dtype == bool:
         selem = ndi.generate_binary_structure(ar.ndim, connectivity)
         ccs = np.zeros_like(ar, dtype=np.int32)
         ndi.label(ar, selem, output=ccs)
     else:
         ccs = out
-
     try:
         component_sizes = np.bincount(ccs.ravel())
     except ValueError:
         raise ValueError("Negative value labels are not supported. Try "
                          "relabeling the input with `scipy.ndimage.label` or "
                          "`skimage.morphology.label`.")
-
     if len(component_sizes) == 2 and out.dtype != bool:
         warn("Only one label was provided to `remove_small_objects`. "
              "Did you mean to use a boolean array?")
-
     too_big = component_sizes > max_size
     too_big_mask = too_big[ccs]
     out[too_big_mask] = 0
-
     return out

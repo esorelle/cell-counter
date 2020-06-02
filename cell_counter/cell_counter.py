@@ -74,7 +74,6 @@ def get_chamber_cell_counts_bf(
     for blob in regionprops(label(blobs_2)):
         if blob.extent > min_blob_extent:
             tmp_north, tmp_west, tmp_south, tmp_east = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
-
             # new condition based on bounding box dimensions -- remove if needed
             if np.logical_and(70 < tmp_east - tmp_west < 100, 180 < tmp_south - tmp_north < 240):
                 north.append(tmp_north)
@@ -109,7 +108,7 @@ def get_chamber_cell_counts_bf(
     # make rectangles (or insert chamber polygon ndarray with reference to anchor point)
     rect_mask = np.zeros(np.shape(input_img))
     for i in range(len(true_north)):
-        rect_mask[south[i]-212:south[i]-15, west[i]:east[i]] = 1
+        rect_mask[south[i]-212:south[i], west[i]-5:east[i]+5] = 1
 
     # de-rotate the image by finding chamber row angles and correcting
     anchors_x = [np.int(np.round((east[i] + west[i]) / 2)) for i in range(len(east))]
@@ -318,7 +317,7 @@ def get_chamber_cell_counts_bf(
     plt.savefig(img_name + '_detected_cells' + '.png')
     plt.close()
 
-    # tabulate the counted cells by chamber for output
+    # tabulate the counted cells by chamber for output -- original white tophat counting method
     prefix = img_name[img_name.find('ST_'):img_name.find('ST_') + 14] + '_CHAMBER_'
     address_counts = {}
     chamber_cell_count_array = np.zeros(len(north))
@@ -327,6 +326,61 @@ def get_chamber_cell_counts_bf(
             if west[c] < x_coords[p] < east[c]:
                 if south[c] - 212 < y_coords[p] < south[c]-15:
                     chamber_cell_count_array[c] += 1
+
+
+    ### CONTOUR COUNTING (2020-06-02) ###
+    chamber_cell_count_array_contours = []
+    plt.imshow(rect_mask)
+    plt.show()
+    gate_img = img_scaled * rect_mask  # changed from apartment_mask to better detect cells on apt edges
+    gate_img = gate_img > 1.01  # 260 for apartment_mask, 1.01 for rect_mask
+    plt.imshow(gate_img)
+    plt.show()
+    contour_tree, hierarchy = cv2.findContours(
+        gate_img.astype(np.uint8),
+        cv2.RETR_CCOMP,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    filtered_contours = []
+    for contour in contour_tree:
+        area = cv2.contourArea(contour)
+        if 20 < area < 300:
+            filtered_contours.append(contour)
+
+    chamber_cell_count_array_contours = np.zeros(len(true_north))
+    apt_blobs = morphology.dilation(apartment_mask)
+    apt_blobs = label(apt_blobs)  # revert to label(apartment_mask) if no dilation
+    contour_points = []
+
+    for i, apt in enumerate(regionprops(apt_blobs)):
+        apt_coords = [tuple(j) for j in apt.coords]
+        for c in filtered_contours:
+            M = cv2.moments(c)
+            cx = int(M['m10']/M['m00'])
+            cy = int(M['m01']/M['m00'])
+            test_point = tuple([cy, cx])
+            if test_point in apt_coords:
+                chamber_cell_count_array_contours[i] += 1
+                contour_points.append(test_point)  # use for scatter plot of counted cells
+
+    chamber_cell_count_array_contours = chamber_cell_count_array_contours.tolist()
+    chamber_cell_count_array_contours = [int(count) for count in chamber_cell_count_array_contours]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    # subbed new_img for input_img to show detected apartment and text regions
+    ax.imshow(new_img, cmap='gray')
+
+    for point in contour_points:
+        ax.scatter(point[1], point[0], s=4, c='lightcoral', marker='x')
+
+    ax.set_axis_off()
+    plt.title('#_of_detected_cell_contours_in_image = ' + str(len(contour_points)))
+    plt.tight_layout()
+    plt.savefig(img_name + '_detected_cell_contours' + '.png')
+    plt.close()
+    ### END CONTOUR COUNTING###
+
 
     for chamber in range(len(chamber_cell_count_array)):
         if chamber < 9:
