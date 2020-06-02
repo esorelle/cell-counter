@@ -343,7 +343,7 @@ def get_chamber_cell_counts_bf(
     filtered_contours = []
     for contour in contour_tree:
         area = cv2.contourArea(contour)
-        if 20 < area < 300:
+        if min_cell_area < area < max_cell_area:  # was 20-300 range
             filtered_contours.append(contour)
 
     chamber_cell_count_array_contours = np.zeros(len(true_north))

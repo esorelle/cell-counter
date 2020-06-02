@@ -37,10 +37,10 @@ from cell_counter import cell_counter
     '--tophat_selem', default=9, show_default=True,
     help="""sets size of white tophat structuring element for cell detection""")
 @click.option(
-    '--min_cell_area', default=35, show_default=True,
+    '--min_cell_area', default=25, show_default=True,
     help="""sets minimum number of pixels to consider a cell""")
 @click.option(
-    '--max_cell_area', default=1000, show_default=True,
+    '--max_cell_area', default=300, show_default=True,
     help="""sets maximum number of pixels to consider a cell""")
 @click.option(
     '--save_process_pics', type=int, default=0, show_default=True,
