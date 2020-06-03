@@ -1,2 +1,2 @@
-# cell-proliferation-scratch
-A scratch repo for ideas, prototypes, and shenanigans related to the cell proliferation project
+# cell-counter
+A Python library for segmenting and counting proliferating cells.
