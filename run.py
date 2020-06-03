@@ -48,7 +48,7 @@ from cell_counter import cell_counter
 @click.option(
     '--count_hist', type=int, default=1, show_default=True,
     help="""set to 1 to save a summary histogram of chamber cell counts for directory""")
-@click.argument('targetdirectory', type = click.Path(exists=True))  # no help statements for required arguments
+@click.argument('targetdirectory', type=click.Path(exists=True))  # no help statements for required arguments
 def cli(
         flip,
         gauss_blur_sigma,
