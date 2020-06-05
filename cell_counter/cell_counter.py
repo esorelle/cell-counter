@@ -12,12 +12,12 @@ from skimage.measure import label, regionprops
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 
-from cell_counter import utils
+from cell_counter import utils, core
 
 workflow_list = [
-    'denoise',
+    'denoise',  # 1
     'norm',
-    'edges',
+    'edges',  # 2
     'dilate',
     'invert',
     'maxout',
@@ -27,9 +27,10 @@ workflow_list = [
     'minout',
     'label',
     'borderout',
-    'de-rotate',
-    'apartment_mask',
+    'de-rotate',  # 3
+    'apartment_mask',  # 4
     'read_digits'
+    # 5 - cell counting (multiple types)
 ]
 apartment_workflow = ' -> '.join(workflow_list)
 cell_workflow = 'denoise -> norm -> tophat -> blur -> distance -> label -> centroids'
@@ -50,11 +51,7 @@ def get_chamber_cell_counts_bf(
         max_cell_area,
         save_process_pics
 ):
-    # find the chambers
-    img_blur = filters.gaussian(input_img, gauss_blur_sigma)
-    back_map = filters.threshold_local(img_blur, window_thresh, offset=0)
-    img_scaled = np.divide(img_blur, back_map) * 255
-    img_8b = np.uint8(input_img / (2**8 + 1))   # new for rotational matrix calc
+    img_scaled = core.light_correction(input_img, gauss_blur_sigma, window_thresh)
 
     edges_0 = (img_scaled < scaling_thresh)
     # 2,3 --> changed to 1,3 to reduce connectivity of dense cells
@@ -66,78 +63,32 @@ def get_chamber_cell_counts_bf(
     blobs_1 = utils.remove_large_objects(blobs_0, max_blob_area)
     # 3,1 --> changed to 4,1 to increase blob grouping of dense cells as contiguous apartment
     blobs_2 = morphology.closing(blobs_1, morphology.selem.rectangle(5, 1))
-    blobs_3 = np.zeros(np.shape(input_img))
 
-    north, west, south, east = [], [], [], []
-    true_north = []
-
-    for blob in regionprops(label(blobs_2)):
-        if blob.extent > min_blob_extent:
-            tmp_north, tmp_west, tmp_south, tmp_east = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
-            # new condition based on bounding box dimensions -- remove if needed
-            if np.logical_and(70 < tmp_east - tmp_west < 100, 180 < tmp_south - tmp_north < 240):
-                north.append(tmp_north)
-                west.append(tmp_west - 3)
-                south.append(tmp_south)
-                east.append(tmp_east + 3)
-                true_north.append(tmp_south - 212)
-                hull = blob.convex_image
-                blobs_3[tmp_north:tmp_south, tmp_west:tmp_east] = hull
+    blobs_3 = core.filter_blobs_by_extent(blobs_2, min_blob_extent)
 
     blobs_4 = morphology.opening(blobs_3, morphology.selem.disk(3))
     blobs_5 = blobs_4 > 0
     blobs_6 = morphology.remove_small_objects(blobs_5, min_blob_area)
     blobs_7 = label(blobs_6, connectivity=2)
-    refined_blobs = np.zeros(np.shape(input_img))
 
-    north, west, south, east = [], [], [], []
-    true_north = []
-    for blob in regionprops(blobs_7):
-        # edge border of image -- was 50 pixels
-        if abs(blob.centroid[0] - np.shape(input_img)[0]) > 70 and blob.centroid[0] > 70:
-            if abs(blob.centroid[1] - np.shape(input_img)[1]) > 70 and blob.centroid[1] > 70:
-                tmp_north, tmp_west, tmp_south, tmp_east = blob.bbox[0], blob.bbox[1], blob.bbox[2], blob.bbox[3]
-                north.append(tmp_north)
-                west.append(tmp_west - 3)
-                south.append(tmp_south)
-                east.append(tmp_east + 3)
-                true_north.append(tmp_south - 212)
-                hull = blob.convex_image
-                refined_blobs[tmp_north:tmp_south, tmp_west:tmp_east] = hull
-
-    # make rectangles (or insert chamber polygon ndarray with reference to anchor point)
-    rect_mask = np.zeros(np.shape(input_img))
-    for i in range(len(true_north)):
-        rect_mask[south[i]-216:south[i], west[i]-5:east[i]+5] = 1
+    refined_blobs, blob_boundaries = core.filter_blobs_near_edge(blobs_7)
 
     # de-rotate the image by finding chamber row angles and correcting
-    anchors_x = [np.int(np.round((east[i] + west[i]) / 2)) for i in range(len(east))]
-    anchors_y = [np.int(np.round(south[i])) for i in range(len(south))]     # analog of centers_y in Scott's code
-    c_centers = [(anchors_x[i], anchors_y[i]) for i in range(len(anchors_y))]
-    assigned_idx = []
-    centers_y = np.array(anchors_y)
-
-    row_dist = 110  # rows are separated by roughly 220px
-    rows = []
-    for i, cy in enumerate(centers_y):
-        if i in assigned_idx:
-            continue
-        row_min = cy - row_dist
-        row_max = cy + row_dist
-        in_row = np.logical_and(centers_y > row_min, centers_y < row_max)
-        row_membership = np.where(in_row)
-        row_members = list(row_membership[0])
-        rows.append(row_members)
-        assigned_idx.extend(row_members)
+    rows, c_centers = core.find_rows(blob_boundaries)
 
     r_degs = []
     for r in rows:
+        # linregress doesn't work well for 2 points, so we skip rows with fewer than 3 points
+        if len(r) <= 2:
+            continue
+
         gradient, intercept, r_value, p_value, std_err = stats.linregress(c_centers[r[0]:r[-1] + 1])
         if gradient < 1:              # 2020-05-13: override large angle adjustments (observed bug)
             r_deg = np.degrees(np.arctan(gradient))
             r_degs.append(r_deg)
 
     r_deg_mean = np.mean(r_degs)
+    img_8b = np.uint8(input_img / (2**8 + 1))   # new for rotational matrix calc
     n_rows, n_cols = np.shape(img_8b)
     rot_mat = cv2.getRotationMatrix2D((n_cols/2., n_rows/2.), r_deg_mean, 1)
     img_rot = cv2.warpAffine(img_8b, rot_mat, (n_cols, n_rows))
@@ -322,16 +273,15 @@ def get_chamber_cell_counts_bf(
     # tabulate the counted cells by chamber for output -- original white tophat counting method
     prefix = img_name[img_name.find('ST_'):img_name.find('ST_') + 14] + '_CHAMBER_'
     address_counts = {}
-    chamber_cell_count_array = np.zeros(len(north))
+    chamber_cell_count_array = np.zeros(len(blob_boundaries['true_north']))
     for p in range(len(x_coords)):
-        for c in range(len(true_north)):
-            if west[c] < x_coords[p] < east[c]:
-                if south[c] - 212 < y_coords[p] < south[c]-15:
+        for c in range(len(blob_boundaries['true_north'])):
+            if blob_boundaries['west'][c] < x_coords[p] < blob_boundaries['east'][c]:
+                if blob_boundaries['south'][c] - 212 < y_coords[p] < blob_boundaries['south'][c]-15:
                     chamber_cell_count_array[c] += 1
 
-
-    ### CONTOUR COUNTING (2020-06-02) ###
-    chamber_cell_count_array_contours = []
+    # CONTOUR COUNTING (2020-06-02)
+    rect_mask = core.make_rectangle_mask(refined_blobs, blob_boundaries)
     gate_img = img_scaled * rect_mask  # changed from apartment_mask to better detect cells on apt edges
     gate_img = gate_img > 1.01  # 260 for apartment_mask, 1.01 for rect_mask
     contour_tree, hierarchy = cv2.findContours(
@@ -346,9 +296,8 @@ def get_chamber_cell_counts_bf(
         if min_cell_area < area < max_cell_area:  # was 20-300 range
             filtered_contours.append(contour)
 
-    chamber_cell_count_array_contours = np.zeros(len(true_north))
+    chamber_cell_count_array_contours = np.zeros(len(refined_blobs))
     apt_blobs = morphology.dilation(apartment_mask)
-    apt_blobs = label(apt_blobs)  # revert to label(apartment_mask) if no dilation
     contour_points = []
 
     for apt in range(len(ordered_apartments)):
@@ -430,7 +379,6 @@ def get_chamber_cell_counts_bf(
     # plt.savefig(img_name + '_detected_split_cells' + '.png')
     # plt.close()
     ### END SPECTRAL CLUSTER SPLITTING ###
-
 
     for chamber in range(len(chamber_cell_count_array)):
         if chamber < 9:
