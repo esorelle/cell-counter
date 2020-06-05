@@ -86,9 +86,9 @@ def split_multi_cell(signal_img, multi_cell_mask, max_cell_area, plot=False):
 
 
 
-mask = np.load('cell-counter/cell_counter/test_apt_mask.npy')
-img = np.load('cell-counter/cell_counter/test_scaled_img.npy')
-gate = np.load('cell-counter/cell_counter/test_thresh_gated_cells.npy')
+mask = np.load('test_apt_mask.npy')
+img = np.load('test_scaled_img.npy')
+gate = np.load('test_thresh_gated_cells.npy')
 gate = gate.astype(np.uint8)
 
 contour_tree, hierarchy = cv2.findContours(
@@ -106,9 +106,9 @@ for contour in contour_tree:
 print(len(contour_tree))
 print(len(filtered_contours))
 
-# image = cv2.imread('cell-counter/cell_counter/BF_ST_080_APT_004_20190315115128.tif')
-# image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-# cv2.namedWindow("cell contours", cv2.WINDOW_NORMAL)
-# cv2.drawContours(image, filtered_contours, -1, (0,255,0), 1)
-# cv2.imshow("cell contours", image)
-# cv2.waitKey(0)
+image = cv2.imread('BF_ST_080_APT_004_20190315115128.tif')
+image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+cv2.namedWindow("cell contours", cv2.WINDOW_NORMAL)
+cv2.drawContours(image, filtered_contours, -1, (0,255,0), 1)
+cv2.imshow("cell contours", image)
+cv2.waitKey(0)

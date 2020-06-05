@@ -1,7 +1,15 @@
+import cv2
 import numpy as np
-from skimage import filters
+from scipy import stats
+from scipy import ndimage as ndi
+from skimage import filters, morphology
 from skimage.measure import label, regionprops
+from skimage.feature import peak_local_max
+from skimage.segmentation import watershed
 
+from cell_counter import utils
+
+import matplotlib.pyplot as plt
 
 def light_correction(input_img, gauss_blur_sigma, window_thresh):
     img_blur = filters.gaussian(input_img, gauss_blur_sigma)
@@ -88,3 +96,175 @@ def find_rows(blob_boundaries):
         assigned_idx.extend(row_members)
 
     return rows, c_centers
+
+
+def rotate_image(input_img, rows, c_centers):
+    n_cols, n_rows = np.shape(input_img)
+    r_degs = []
+    for r in rows:
+        # linregress doesn't work well for 2 points, so we skip rows with fewer than 3 points
+        if len(r) <= 2:
+            continue
+
+        gradient, intercept, r_value, p_value, std_err = stats.linregress(c_centers[r[0]:r[-1] + 1])
+        if gradient < 1:              # 2020-05-13: override large angle adjustments (observed bug)
+            r_deg = np.degrees(np.arctan(gradient))
+            r_degs.append(r_deg)
+
+    r_deg_mean = np.mean(r_degs)
+    img_8b = np.uint8(input_img / (2**8 + 1))   # new for rotational matrix calc
+    n_rows, n_cols = np.shape(img_8b)
+    rot_mat = cv2.getRotationMatrix2D((n_cols/2., n_rows/2.), r_deg_mean, 1)
+    img_rot = cv2.warpAffine(img_8b, rot_mat, (n_cols, n_rows))
+    new_img = cv2.cvtColor(img_rot, cv2.COLOR_GRAY2RGB)
+
+    return new_img, img_rot, r_deg_mean, n_cols, n_rows
+
+
+def get_key_regions(new_img, img_rot, c_centers, r_deg_mean, n_cols, n_rows):
+    row_text_regions = []
+    col_text_regions = []
+    apartment_mask = np.zeros(np.shape(new_img))  # changed from input_img 2020-06-05
+    ordered_apartments = []
+
+    for c_center in c_centers:
+        rot_c = utils.rotate(c_center, origin=(n_cols/2., n_rows/2.), degrees=r_deg_mean)
+        c_int_tup = tuple(np.round(rot_c).astype(np.int))
+
+        # rect for row number
+        row_rect_vert1 = (c_int_tup[0] + 44, c_int_tup[1] - 171)    # -10, -128
+        row_rect_vert2 = (c_int_tup[0] + 95, c_int_tup[1] - 139)    # +40, -100
+        row_text_regions.append(img_rot[c_int_tup[1] - 171:c_int_tup[1] - 139, c_int_tup[0] + 44:c_int_tup[0] + 95])
+
+        # rect for col number
+        col_rect_vert1 = (c_int_tup[0] - 97, c_int_tup[1] - 71)    # -148, -30
+        col_rect_vert2 = (c_int_tup[0] - 40, c_int_tup[1] - 39)      # -98, -2
+        col_text_regions.append(img_rot[c_int_tup[1] - 71:c_int_tup[1] - 39, c_int_tup[0] - 97:c_int_tup[0] - 40])
+
+        # apt region
+        apt_offset_x = c_int_tup[0] - utils.apt_ref_mask.shape[1] + 44    # -10
+        apt_offset_y = c_int_tup[1] - utils.apt_ref_mask.shape[0] + 5    # +45
+        apt_c = utils.apt_ref_c + [apt_offset_x, apt_offset_y]
+        ordered_apartments.append(apt_c)
+        cv2.circle(new_img, c_int_tup, 5, (60, 220, 60), -1)
+        cv2.rectangle(new_img, row_rect_vert1, row_rect_vert2, (186, 85, 211), 2)
+        cv2.rectangle(new_img, col_rect_vert1, col_rect_vert2, (190, 160, 65), 2)
+        cv2.drawContours(new_img, [apt_c], 0, (65, 105, 255), 2)
+        cv2.drawContours(apartment_mask, [apt_c], 0, (255, 255, 255), -1)
+
+    return new_img, apartment_mask, row_text_regions, col_text_regions, ordered_apartments
+
+
+def read_digits(row_text_regions, col_text_regions):
+    row_numbers = []        # fill with read numbers
+    row_num_avg_conf = []   # fill with mean score value from identify digits
+    col_numbers = []        # fill with read numbers
+    col_num_avg_conf = []   # fill with mean score value from identify digits
+    single_digits = []
+
+    for r in row_text_regions:
+        row_confs = []
+        if np.all(r > 0):                   # test any negative indices due to edge of image
+            r_split = np.split(r, 3, axis=1)
+            digits = []
+            for sub_r in r_split:
+                single_digits.append(sub_r)
+                digits.append(str(utils.identify_digit(sub_r)[0]))
+                row_confs.append(utils.identify_digit(sub_r)[1])
+            if len(digits) < 2:
+                digits = ['_', '_', '_']    # dummy numbering to prevent empty error
+        else:
+            digits = ['-Y', '-Y', '-Y']        # dummy numbering to prevent negative index error
+
+        row_numbers.append(''.join(digits))
+        row_num_avg_conf.append(np.mean(row_confs))
+
+    for r in col_text_regions:
+        col_confs = []
+        if np.all(r > 0):
+            r_split = np.split(r, 3, axis=1)
+            digits = []
+            for sub_r in r_split:           # test any negative indices due to edge of image
+                digits.append(str(utils.identify_digit(sub_r)[0]))
+                col_confs.append(utils.identify_digit(sub_r)[1])
+            if len(digits) < 2:
+                digits = ['_', '_', '_']     # dummy numbering to prevent empty error
+        else:
+            digits = ['-X', '-X', '-X']         # dummy numbering to prevent negative index error
+
+        col_numbers.append(''.join(digits))
+        col_num_avg_conf.append(np.mean(col_confs))
+
+    return row_numbers, row_num_avg_conf, col_numbers, col_num_avg_conf
+
+def detect_cells_tophat(input_img, window_thresh, tophat_selem, sigma=1):
+    img_scaled = light_correction(input_img, sigma, window_thresh)
+    struct_elem = morphology.disk(tophat_selem)
+    img_scaled = img_scaled / 255
+    b0 = morphology.white_tophat(img_scaled, struct_elem)
+    b1 = b0 * (b0 > 0.035)
+    b2 = filters.gaussian(b1, sigma=1.25)
+    b3 = b2 > 0.05
+    distance = ndi.distance_transform_edt(b3)
+    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((11, 11)), labels=b3)
+    markers = ndi.label(local_maxi)[0]
+    labels = watershed(-distance, markers, mask=b3)
+    return labels
+
+
+def count_cells_tophat(blob_boundaries, x_coords, y_coords):
+    chamber_cell_count_array = np.zeros(len(blob_boundaries['true_north']))
+    for p in range(len(x_coords)):
+        for c in range(len(blob_boundaries['true_north'])):
+            if blob_boundaries['west'][c] < x_coords[p] < blob_boundaries['east'][c]:
+                if blob_boundaries['south'][c] - 212 < y_coords[p] < blob_boundaries['south'][c]-15:
+                    chamber_cell_count_array[c] += 1
+
+    return chamber_cell_count_array
+
+
+def detect_and_count_cell_contours(
+        img_scaled, rect_mask,
+        apartment_mask,
+        ordered_apartments,
+        min_cell_area,
+        max_cell_area
+):
+    gate_img = img_scaled * rect_mask  # changed from apartment_mask to better detect cells on apt edges
+    gate_img = gate_img > 0.8 * np.max(gate_img)  # NEED TO REVIEW FOR PERFORMANCE ACROSS IMAGES -- HOW BEST TO SCALE FOR UNIFORM COUNTING?
+    contour_tree, hierarchy = cv2.findContours(
+        gate_img.astype(np.uint8),
+        cv2.RETR_CCOMP,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    filtered_contours = []
+    for contour in contour_tree:
+        area = cv2.contourArea(contour)
+        if min_cell_area < area < max_cell_area:  # was 20-300 range
+            filtered_contours.append(contour)
+
+    chamber_cell_count_array_contours = np.zeros(len(ordered_apartments))
+    apt_blobs = morphology.dilation(apartment_mask)
+    contour_points = []
+
+    for apt in range(len(ordered_apartments)):
+        temp_mask = np.zeros(np.shape(gate_img))
+        cv2.drawContours(temp_mask, [ordered_apartments[apt]], 0, (255, 255, 255), -1)
+        temp_roi = label(temp_mask)
+        # plt.imshow(temp_roi)
+        # plt.show()
+        for blob in regionprops(temp_roi):
+            temp_roi_coords = [tuple(j) for j in blob.coords]
+            for c in filtered_contours:
+                M = cv2.moments(c)
+                cx = int(M['m10']/M['m00'])
+                cy = int(M['m01']/M['m00'])
+                test_point = tuple([cy, cx])
+                if test_point in temp_roi_coords:
+                    chamber_cell_count_array_contours[apt] += 1
+                    contour_points.append(test_point)  # use for scatter plot of counted cells
+
+    chamber_cell_count_array_contours = [int(count) for count in chamber_cell_count_array_contours]
+
+    return chamber_cell_count_array_contours, contour_points
