@@ -9,7 +9,6 @@ from skimage.segmentation import watershed
 
 from cell_counter import utils
 
-import matplotlib.pyplot as plt
 
 def light_correction(input_img, gauss_blur_sigma, window_thresh):
     img_blur = filters.gaussian(input_img, gauss_blur_sigma)
@@ -75,8 +74,12 @@ def make_rectangle_mask(input_blobs, blob_boundaries):
 
 
 def find_rows(blob_boundaries):
-    anchors_x = [np.int(np.round((blob_boundaries['east'][i] + blob_boundaries['west'][i]) / 2)) for i in range(len(blob_boundaries['east']))]
-    anchors_y = [np.int(np.round(blob_boundaries['south'][i])) for i in range(len(blob_boundaries['south']))]  # analog of centers_y in Scott's code
+    anchors_x = [
+        np.int(np.round((blob_boundaries['east'][i] + blob_boundaries['west'][i]) / 2))
+        for i in range(len(blob_boundaries['east']))
+    ]
+    # analog of centers_y in Scott's code
+    anchors_y = [np.int(np.round(blob_boundaries['south'][i])) for i in range(len(blob_boundaries['south']))]
 
     c_centers = [(anchors_x[i], anchors_y[i]) for i in range(len(anchors_y))]
     assigned_idx = []
@@ -99,7 +102,6 @@ def find_rows(blob_boundaries):
 
 
 def rotate_image(input_img, rows, c_centers):
-    n_cols, n_rows = np.shape(input_img)
     r_degs = []
     for r in rows:
         # linregress doesn't work well for 2 points, so we skip rows with fewer than 3 points
@@ -197,6 +199,7 @@ def read_digits(row_text_regions, col_text_regions):
 
     return row_numbers, row_num_avg_conf, col_numbers, col_num_avg_conf
 
+
 def detect_cells_tophat(input_img, window_thresh, tophat_selem, sigma=1):
     img_scaled = light_correction(input_img, sigma, window_thresh)
     struct_elem = morphology.disk(tophat_selem)
@@ -224,14 +227,15 @@ def count_cells_tophat(blob_boundaries, x_coords, y_coords):
 
 
 def detect_and_count_cell_contours(
-        img_scaled, rect_mask,
-        apartment_mask,
+        img_scaled,
+        rect_mask,
         ordered_apartments,
         min_cell_area,
         max_cell_area
 ):
     gate_img = img_scaled * rect_mask  # changed from apartment_mask to better detect cells on apt edges
-    gate_img = gate_img > 0.8 * np.max(gate_img)  # NEED TO REVIEW FOR PERFORMANCE ACROSS IMAGES -- HOW BEST TO SCALE FOR UNIFORM COUNTING?
+    # TODO: NEED TO REVIEW FOR PERFORMANCE ACROSS IMAGES -- HOW BEST TO SCALE FOR UNIFORM COUNTING?
+    gate_img = gate_img > 0.8 * np.max(gate_img)
     contour_tree, hierarchy = cv2.findContours(
         gate_img.astype(np.uint8),
         cv2.RETR_CCOMP,
@@ -245,21 +249,19 @@ def detect_and_count_cell_contours(
             filtered_contours.append(contour)
 
     chamber_cell_count_array_contours = np.zeros(len(ordered_apartments))
-    apt_blobs = morphology.dilation(apartment_mask)
     contour_points = []
 
     for apt in range(len(ordered_apartments)):
         temp_mask = np.zeros(np.shape(gate_img))
         cv2.drawContours(temp_mask, [ordered_apartments[apt]], 0, (255, 255, 255), -1)
         temp_roi = label(temp_mask)
-        # plt.imshow(temp_roi)
-        # plt.show()
+
         for blob in regionprops(temp_roi):
             temp_roi_coords = [tuple(j) for j in blob.coords]
             for c in filtered_contours:
-                M = cv2.moments(c)
-                cx = int(M['m10']/M['m00'])
-                cy = int(M['m01']/M['m00'])
+                moments = cv2.moments(c)
+                cx = int(moments['m10']/moments['m00'])
+                cy = int(moments['m01']/moments['m00'])
                 test_point = tuple([cy, cx])
                 if test_point in temp_roi_coords:
                     chamber_cell_count_array_contours[apt] += 1

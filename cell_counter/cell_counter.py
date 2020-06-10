@@ -3,14 +3,10 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import cv2
 from datetime import datetime as dt
-from scipy import stats
-from scipy import ndimage as ndi
-from skimage import filters, morphology, util
+from skimage import morphology, util
 from skimage.measure import label, regionprops
-from skimage.feature import peak_local_max
-from skimage.segmentation import watershed
+
 
 from cell_counter import utils, core
 
@@ -80,7 +76,14 @@ def get_chamber_cell_counts_bf(
     new_img, img_rot, r_deg_mean, n_cols, n_rows = core.rotate_image(input_img, rows, c_centers)
 
     # get text and apartment regions
-    new_img, apartment_mask, row_text_regions, col_text_regions, ordered_apartments = core.get_key_regions(new_img, img_rot, c_centers, r_deg_mean, n_cols, n_rows)
+    new_img, apartment_mask, row_text_regions, col_text_regions, ordered_apartments = core.get_key_regions(
+        new_img,
+        img_rot,
+        c_centers,
+        r_deg_mean,
+        n_cols,
+        n_rows
+    )
 
     # read row and column numbers by template matching
     row_numbers, row_num_avg_conf, col_numbers, col_num_avg_conf = core.read_digits(row_text_regions, col_text_regions)
@@ -188,7 +191,13 @@ def get_chamber_cell_counts_bf(
 
     # find and count cells by chamber for output -- cell contour method
     rect_mask = core.make_rectangle_mask(refined_blobs, blob_boundaries)
-    chamber_cell_count_array_contours, contour_points = core.detect_and_count_cell_contours(img_scaled, rect_mask, apartment_mask, ordered_apartments, min_cell_area, max_cell_area)
+    chamber_cell_count_array_contours, contour_points = core.detect_and_count_cell_contours(
+        img_scaled,
+        rect_mask,
+        ordered_apartments,
+        min_cell_area,
+        max_cell_area
+    )
 
     # show detected centroids overlay on key region image
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -203,8 +212,7 @@ def get_chamber_cell_counts_bf(
     plt.savefig(img_name + '_detected_cell_contours' + '.png')
     plt.close()
 
-
-    ### SPECTRAL CLUSTER MULTI CELL SPLITTING (SCOTT'S LUNGMAP METHOD) ###
+    # SPECTRAL CLUSTER MULTI CELL SPLITTING (SCOTT'S LUNGMAP METHOD) ###
     # split_cell_contours = utils.split_multi_cell(input_img, gate_img, max_cell_area, plot=False)
     # print('# contours from spectral clustering: ', len(split_cell_contours))
     #
@@ -233,7 +241,7 @@ def get_chamber_cell_counts_bf(
     # plt.tight_layout()
     # plt.savefig(img_name + '_detected_split_cells' + '.png')
     # plt.close()
-    ### END SPECTRAL CLUSTER SPLITTING ###
+    # END SPECTRAL CLUSTER SPLITTING ###
 
     for chamber in range(len(chamber_cell_count_array)):
         if chamber < 9:
