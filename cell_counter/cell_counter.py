@@ -49,6 +49,7 @@ def get_chamber_cell_counts_bf(
 ):
     img_scaled = core.light_correction(input_img, gauss_blur_sigma, window_thresh)
 
+    # ???: Wrap blob detection in core function (with saving of plots)
     edges_0 = (img_scaled < scaling_thresh)
     # 2,3 --> changed to 1,3 to reduce connectivity of dense cells
     # leading to false negative for very full apartments
@@ -73,6 +74,7 @@ def get_chamber_cell_counts_bf(
     rows, c_centers = core.find_rows(blob_boundaries)
 
     # correct image rotation
+    # ???: Should this take pre-processed image instead of original input image?
     new_img, img_rot, r_deg_mean, n_cols, n_rows = core.rotate_image(input_img, rows, c_centers)
 
     # get text and apartment regions
