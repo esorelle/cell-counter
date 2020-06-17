@@ -43,7 +43,7 @@ from cell_counter import cell_counter
     '--max_cell_area', default=300, show_default=True,
     help="""sets maximum number of pixels to consider a cell""")
 @click.option(
-    '--save_process_pics', type=int, default=0, show_default=True,
+    '--save_process_pics', type=bool, default=False, show_default=True,
     help="""set to 1 to save images of all applied image processing steps""")
 @click.option(
     '--count_hist', type=int, default=1, show_default=True,

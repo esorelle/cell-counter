@@ -81,7 +81,36 @@ def split_multi_cell(signal_img, multi_cell_mask, max_cell_area, plot=False):
             )
     return single_cell_contours
 
-
+# SPECTRAL CLUSTER MULTI CELL SPLITTING (SCOTT'S LUNGMAP METHOD) ###
+# split_cell_contours = utils.split_multi_cell(input_img, gate_img, max_cell_area, plot=False)
+# print('# contours from spectral clustering: ', len(split_cell_contours))
+#
+# cell_split_points = []
+#
+# for i, apt in enumerate(regionprops(apt_blobs)):
+#     apt_coords = [tuple(j) for j in apt.coords]
+#     for c in split_cell_contours:
+#         M = cv2.moments(c)
+#         cx = int(M['m10']/M['m00'])
+#         cy = int(M['m01']/M['m00'])
+#         test_point = tuple([cy, cx])
+#         if test_point in apt_coords:
+#             chamber_cell_count_array_contours[i] += 1
+#             cell_split_points.append(test_point)  # use for scatter plot of counted cells
+#
+# fig, ax = plt.subplots(figsize=(10, 6))
+# # subbed new_img for input_img to show detected apartment and text regions
+# ax.imshow(new_img, cmap='gray')
+#
+# for point in cell_split_points:
+#     ax.scatter(point[1], point[0], s=4, c='lightcoral', marker='x')
+#
+# ax.set_axis_off()
+# plt.title('#_of_detected_cell_contours_in_image = ' + str(len(cell_split_points)))
+# plt.tight_layout()
+# plt.savefig(img_name + '_detected_split_cells' + '.png')
+# plt.close()
+# END SPECTRAL CLUSTER SPLITTING ###
 
 
 

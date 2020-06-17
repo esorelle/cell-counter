@@ -1,11 +1,14 @@
+import os
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 from scipy import ndimage as ndi
-from skimage import filters, morphology
+from skimage import filters, morphology, util
 from skimage.measure import label, regionprops
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
+
 
 from cell_counter import utils
 
@@ -58,6 +61,92 @@ def filter_blobs_near_edge(input_blobs):
         'south': south,
         'true_north': true_north
     }
+
+    return refined_blobs, blob_boundaries
+
+
+def save_blob_plots(img_name, edges_0, edges_1, blobs_0, blobs_1, blobs_2, blobs_4, blobs_6, blobs_7, refined_blobs):
+    image_save_path = img_name + '_process_steps'
+    os.chdir(image_save_path)
+
+    plt.imshow(edges_0, cmap='gray')
+    plt.title('001_initial_edges')
+    plt.tight_layout()
+    plt.savefig(img_name + '001_initial_edges' + '.png')
+    plt.close()
+
+    plt.imshow(edges_1, cmap='gray')
+    plt.title('002_dilated_edges')
+    plt.tight_layout()
+    plt.savefig(img_name + '002_dilated_edges' + '.png')
+    plt.close()
+
+    plt.imshow(blobs_0, cmap='gray')
+    plt.title('003_initial_blobs')
+    plt.tight_layout()
+    plt.savefig(img_name + '003_initial_blobs' + '.png')
+    plt.close()
+
+    plt.imshow(blobs_1, cmap='gray')
+    plt.title('004_max_area_filtered_blobs')
+    plt.tight_layout()
+    plt.savefig(img_name + '004_max_area_filtered_blobs' + '.png')
+    plt.close()
+
+    plt.imshow(blobs_2, cmap='gray')
+    plt.title('005_closed_blobs')
+    plt.tight_layout()
+    plt.savefig(img_name + '005_closed_blobs' + '.png')
+    plt.close()
+
+    plt.imshow(blobs_4, cmap='gray')
+    plt.title('006_extent_filtered_opened_blobs')
+    plt.tight_layout()
+    plt.savefig(img_name + '006_extent_filtered_opened_blobs' + '.png')
+    plt.close()
+
+    plt.imshow(blobs_6, cmap='gray')
+    plt.title('007_min_area_filtered_blobs')
+    plt.tight_layout()
+    plt.savefig(img_name + '007_min_area_filtered_blobs' + '.png')
+    plt.close()
+
+    plt.imshow(blobs_7, cmap='nipy_spectral')
+    plt.title('008_labeled_proto_chambers')
+    plt.tight_layout()
+    plt.savefig(img_name + '008_labeled_proto_chambers' + '.png')
+    plt.close()
+
+    plt.imshow(label(refined_blobs, connectivity=2), cmap='nipy_spectral')
+    plt.title('009_labeled_refined_chambers')
+    plt.tight_layout()
+    plt.savefig(img_name + '009_labeled_refined_chambers' + '.png')
+    plt.close()
+
+    os.chdir('..')
+
+
+def find_blobs(input_img, scaling_thresh, min_area, max_area, min_extent, save_plots=False, plot_dir=None):
+    edges_0 = (input_img < scaling_thresh)
+    # Changing rectangle structuring element controls connectivity of dense cells.
+    # Can lead to false negatives for very full apartments
+    # while retaining connection of apartment entry points.
+    edges_1 = morphology.dilation(edges_0, morphology.selem.rectangle(1, 4))
+
+    blobs_0 = util.invert(edges_1)
+    blobs_1 = utils.remove_large_objects(blobs_0, max_area)
+    # increase rect structuring element to increase blob grouping of dense cells as contiguous apartment
+    blobs_2 = morphology.closing(blobs_1, morphology.selem.rectangle(5, 1))
+    blobs_3 = filter_blobs_by_extent(blobs_2, min_extent)
+    blobs_4 = morphology.opening(blobs_3, morphology.selem.disk(3))
+    blobs_5 = blobs_4 > 0
+    blobs_6 = morphology.remove_small_objects(blobs_5, min_area)
+    blobs_7 = label(blobs_6, connectivity=2)
+
+    refined_blobs, blob_boundaries = filter_blobs_near_edge(blobs_7)
+
+    if save_plots:
+        save_blob_plots(plot_dir, edges_0, edges_1, blobs_0, blobs_1, blobs_2, blobs_4, blobs_6, blobs_7, refined_blobs)
 
     return refined_blobs, blob_boundaries
 

@@ -4,9 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import datetime as dt
-from skimage import morphology, util
-from skimage.measure import label, regionprops
-
+from skimage.measure import regionprops
 
 from cell_counter import utils, core
 
@@ -49,26 +47,19 @@ def get_chamber_cell_counts_bf(
 ):
     img_scaled = core.light_correction(input_img, gauss_blur_sigma, window_thresh)
 
-    # ???: Wrap blob detection in core function (with saving of plots)
-    edges_0 = (img_scaled < scaling_thresh)
-    # 2,3 --> changed to 1,3 to reduce connectivity of dense cells
-    # leading to false negative for very full apartments
-    # while retaining connection of apartment entry points.
-    edges_1 = morphology.dilation(edges_0, morphology.selem.rectangle(1, 4))
+    image_save_path = img_name + '_process_steps'
+    os.mkdir(image_save_path)
+    os.chdir(image_save_path)
 
-    blobs_0 = util.invert(edges_1)
-    blobs_1 = utils.remove_large_objects(blobs_0, max_blob_area)
-    # 3,1 --> changed to 4,1 to increase blob grouping of dense cells as contiguous apartment
-    blobs_2 = morphology.closing(blobs_1, morphology.selem.rectangle(5, 1))
-
-    blobs_3 = core.filter_blobs_by_extent(blobs_2, min_blob_extent)
-
-    blobs_4 = morphology.opening(blobs_3, morphology.selem.disk(3))
-    blobs_5 = blobs_4 > 0
-    blobs_6 = morphology.remove_small_objects(blobs_5, min_blob_area)
-    blobs_7 = label(blobs_6, connectivity=2)
-
-    refined_blobs, blob_boundaries = core.filter_blobs_near_edge(blobs_7)
+    refined_blobs, blob_boundaries = core.find_blobs(
+        img_scaled,
+        scaling_thresh,
+        min_blob_area,
+        max_blob_area,
+        min_blob_extent,
+        save_plots=save_process_pics,
+        plot_dir=image_save_path
+    )
 
     # de-rotate the image by finding chamber row angles and correcting
     rows, c_centers = core.find_rows(blob_boundaries)
@@ -91,10 +82,6 @@ def get_chamber_cell_counts_bf(
     row_numbers, row_num_avg_conf, col_numbers, col_num_avg_conf = core.read_digits(row_text_regions, col_text_regions)
 
     # save key region image
-    image_save_path = img_name + '_process_steps'
-    os.mkdir(image_save_path)
-    os.chdir(image_save_path)
-
     plt.figure(figsize=(10, 6))
     plt.imshow(new_img, cmap='gray', vmin=0, vmax=255)
     plt.title('apartment_and_address_overlay')
@@ -103,66 +90,6 @@ def get_chamber_cell_counts_bf(
     plt.close()
 
     os.chdir('..')
-
-    # optional save of process step images
-    if save_process_pics == 1:
-        os.chdir(image_save_path)
-
-        plt.imshow(edges_0, cmap='gray')
-        plt.title('001_initial_edges')
-        plt.tight_layout()
-        plt.savefig(img_name + '001_initial_edges' + '.png')
-        plt.close()
-
-        plt.imshow(edges_1, cmap='gray')
-        plt.title('002_dilated_edges')
-        plt.tight_layout()
-        plt.savefig(img_name + '002_dilated_edges' + '.png')
-        plt.close()
-
-        plt.imshow(blobs_0, cmap='gray')
-        plt.title('003_initial_blobs')
-        plt.tight_layout()
-        plt.savefig(img_name + '003_initial_blobs' + '.png')
-        plt.close()
-
-        plt.imshow(blobs_1, cmap='gray')
-        plt.title('004_max_area_filtered_blobs')
-        plt.tight_layout()
-        plt.savefig(img_name + '004_max_area_filtered_blobs' + '.png')
-        plt.close()
-
-        plt.imshow(blobs_2, cmap='gray')
-        plt.title('005_closed_blobs')
-        plt.tight_layout()
-        plt.savefig(img_name + '005_closed_blobs' + '.png')
-        plt.close()
-
-        plt.imshow(blobs_4, cmap='gray')
-        plt.title('006_extent_filtered_opened_blobs')
-        plt.tight_layout()
-        plt.savefig(img_name + '006_extent_filtered_opened_blobs' + '.png')
-        plt.close()
-
-        plt.imshow(blobs_6, cmap='gray')
-        plt.title('007_min_area_filtered_blobs')
-        plt.tight_layout()
-        plt.savefig(img_name + '007_min_area_filtered_blobs' + '.png')
-        plt.close()
-
-        plt.imshow(blobs_7, cmap='nipy_spectral')
-        plt.title('008_labeled_proto_chambers')
-        plt.tight_layout()
-        plt.savefig(img_name + '008_labeled_proto_chambers' + '.png')
-        plt.close()
-
-        plt.imshow(label(refined_blobs, connectivity=2), cmap='nipy_spectral')
-        plt.title('009_labeled_refined_chambers')
-        plt.tight_layout()
-        plt.savefig(img_name + '009_labeled_refined_chambers' + '.png')
-        plt.close()
-
-        os.chdir('..')
 
     # count the cells in each chamber -- tophat method
     labels = core.detect_cells_tophat(input_img, window_thresh, tophat_selem, sigma=1)
@@ -214,37 +141,6 @@ def get_chamber_cell_counts_bf(
     plt.savefig(img_name + '_detected_cell_contours' + '.png')
     plt.close()
 
-    # SPECTRAL CLUSTER MULTI CELL SPLITTING (SCOTT'S LUNGMAP METHOD) ###
-    # split_cell_contours = utils.split_multi_cell(input_img, gate_img, max_cell_area, plot=False)
-    # print('# contours from spectral clustering: ', len(split_cell_contours))
-    #
-    # cell_split_points = []
-    #
-    # for i, apt in enumerate(regionprops(apt_blobs)):
-    #     apt_coords = [tuple(j) for j in apt.coords]
-    #     for c in split_cell_contours:
-    #         M = cv2.moments(c)
-    #         cx = int(M['m10']/M['m00'])
-    #         cy = int(M['m01']/M['m00'])
-    #         test_point = tuple([cy, cx])
-    #         if test_point in apt_coords:
-    #             chamber_cell_count_array_contours[i] += 1
-    #             cell_split_points.append(test_point)  # use for scatter plot of counted cells
-    #
-    # fig, ax = plt.subplots(figsize=(10, 6))
-    # # subbed new_img for input_img to show detected apartment and text regions
-    # ax.imshow(new_img, cmap='gray')
-    #
-    # for point in cell_split_points:
-    #     ax.scatter(point[1], point[0], s=4, c='lightcoral', marker='x')
-    #
-    # ax.set_axis_off()
-    # plt.title('#_of_detected_cell_contours_in_image = ' + str(len(cell_split_points)))
-    # plt.tight_layout()
-    # plt.savefig(img_name + '_detected_split_cells' + '.png')
-    # plt.close()
-    # END SPECTRAL CLUSTER SPLITTING ###
-
     for chamber in range(len(chamber_cell_count_array)):
         if chamber < 9:
             address_counts[prefix + '00' + str(chamber + 1)] = [
@@ -284,10 +180,10 @@ def process_directory_relative_id(
         count_hist,
         targetdirectory
 ):
-    version = '_v20200513'
+    version = '_v20200617'
     cwd = targetdirectory
     os.chdir(cwd)
-    save_path = 'analysis_' + dt.now().strftime('%Y_%m_%d_%H_%M')
+    save_path = 'analysis_' + dt.now().strftime('%Y_%m_%d_%H_%M_%S')
     os.mkdir(save_path)
     images = glob.glob('./*.tif')
     images = [r[2:] for r in images]
