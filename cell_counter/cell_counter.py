@@ -34,18 +34,16 @@ cell_workflow = 'denoise -> norm -> tophat -> blur -> distance -> label -> centr
 def get_chamber_cell_counts_bf(
         input_img,
         img_name,
-        gauss_blur_sigma,
         window_thresh,
         scaling_thresh,
         min_blob_area,
         max_blob_area,
         min_blob_extent,
-        tophat_selem,
         min_cell_area,
         max_cell_area,
         save_process_pics
 ):
-    img_scaled = core.light_correction(input_img, gauss_blur_sigma, window_thresh)
+    img_scaled = core.light_correction(input_img)
 
     image_save_path = img_name + '_process_steps'
     os.mkdir(image_save_path)
@@ -92,7 +90,7 @@ def get_chamber_cell_counts_bf(
     os.chdir('..')
 
     # count the cells in each chamber -- tophat method
-    labels = core.detect_cells_tophat(input_img, window_thresh, tophat_selem, sigma=1)
+    labels = core.detect_cells_tophat(input_img, window_thresh)
 
     # show detected centroids overlay on key region image
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -167,13 +165,11 @@ def get_chamber_cell_counts_bf(
 # directory wrapper
 def process_directory_relative_id(
         flip,
-        gauss_blur_sigma,
         window_thresh,
         scaling_thresh,
         min_blob_area,
         max_blob_area,
         min_blob_extent,
-        tophat_selem,
         min_cell_area,
         max_cell_area,
         save_process_pics,
@@ -218,13 +214,11 @@ def process_directory_relative_id(
         address_counts = get_chamber_cell_counts_bf(
             raw_img,
             img_name,
-            gauss_blur_sigma,
             window_thresh,
             scaling_thresh,
             min_blob_area,
             max_blob_area,
             min_blob_extent,
-            tophat_selem,
             min_cell_area,
             max_cell_area,
             save_process_pics
@@ -314,12 +308,10 @@ def process_directory_relative_id(
     metadata.write('naive_chamber_id_rate: ' + str(naive_chamber_id_rate * 100) + '%' + '\n')
     metadata.write('\n')
     metadata.write('window_thresh: ' + str(window_thresh) + '\n')
-    metadata.write('gauss_blur_sigma: ' + str(gauss_blur_sigma) + '\n')
     metadata.write('scaling_thresh: ' + str(scaling_thresh) + '\n')
     metadata.write('min_blob_area: ' + str(min_blob_area) + '\n')
     metadata.write('max_blob_area: ' + str(max_blob_area) + '\n')
     metadata.write('min_blob_extent: ' + str(min_blob_extent) + '\n')
-    metadata.write('tophat_selem: ' + str(tophat_selem) + '\n')
     metadata.write('min_cell_area: ' + str(min_cell_area) + '\n')
     metadata.write('max_cell_area: ' + str(max_cell_area) + '\n')
     metadata.close()

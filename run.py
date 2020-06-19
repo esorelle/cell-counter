@@ -16,9 +16,6 @@ from cell_counter import cell_counter
     '--flip', default=True, show_default=True,
     help="""flip images horizontally to read chamber addresses""")
 @click.option(
-    '--gauss_blur_sigma', type=int, default=0.9, show_default=True,
-    help="""sets extent of image blur to de-noise before blob detection""")
-@click.option(
     '--window_thresh', type=int, default=9, show_default=True,
     help="""sets size of window used for local adaptive background norm""")
 @click.option(
@@ -34,9 +31,6 @@ from cell_counter import cell_counter
     '--min_blob_extent', type=float, default=0.25, show_default=True,
     help="""sets min pct of bounding box blob must occupy (>25% for chambers)""")
 @click.option(
-    '--tophat_selem', default=9, show_default=True,
-    help="""sets size of white tophat structuring element for cell detection""")
-@click.option(
     '--min_cell_area', default=25, show_default=True,
     help="""sets minimum number of pixels to consider a cell""")
 @click.option(
@@ -51,13 +45,11 @@ from cell_counter import cell_counter
 @click.argument('targetdirectory', type=click.Path(exists=True))  # no help statements for required arguments
 def cli(
         flip,
-        gauss_blur_sigma,
         window_thresh,
         scaling_thresh,
         min_blob_area,
         max_blob_area,
         min_blob_extent,
-        tophat_selem,
         min_cell_area,
         max_cell_area,
         save_process_pics,
@@ -67,13 +59,11 @@ def cli(
     print('counting cells in: ' + targetdirectory + '...')
     cell_counter.process_directory_relative_id(
         flip,
-        gauss_blur_sigma,
         window_thresh,
         scaling_thresh,
         min_blob_area,
         max_blob_area,
         min_blob_extent,
-        tophat_selem,
         min_cell_area,
         max_cell_area,
         save_process_pics,

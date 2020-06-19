@@ -13,12 +13,16 @@ from skimage.segmentation import watershed
 from cell_counter import utils
 
 
-def light_correction(input_img, gauss_blur_sigma, window_thresh):
-    img_blur = filters.gaussian(input_img, gauss_blur_sigma)
-    back_map = filters.threshold_local(img_blur, window_thresh, offset=0)
-    img_scaled = np.divide(img_blur, back_map) * 255
+def light_correction(input_img):
+    img_blur = cv2.GaussianBlur(input_img, (15, 15), 1.5)
+    img_corr = input_img / img_blur
 
-    return img_scaled
+    # Translate to zero, then normalize to 8-bit range
+    img_corr = img_corr - img_corr.min()
+    img_corr = np.floor((img_corr / img_corr.max()) * 255.0)
+    img_corr = img_corr.astype(np.uint8)
+
+    return img_corr
 
 
 def filter_blobs_by_extent(input_blobs, min_blob_extent):
@@ -191,6 +195,9 @@ def find_rows(blob_boundaries):
 
 
 def rotate_image(input_img, rows, c_centers):
+    if len(rows) == 0:
+        raise ValueError("rows list cannot be empty")
+
     r_degs = []
     for r in rows:
         # linregress doesn't work well for 2 points, so we skip rows with fewer than 3 points
@@ -289,18 +296,21 @@ def read_digits(row_text_regions, col_text_regions):
     return row_numbers, row_num_avg_conf, col_numbers, col_num_avg_conf
 
 
-def detect_cells_tophat(input_img, window_thresh, tophat_selem, sigma=1):
-    img_scaled = light_correction(input_img, sigma, window_thresh)
+def detect_cells_tophat(input_img, tophat_selem):
     struct_elem = morphology.disk(tophat_selem)
-    img_scaled = img_scaled / 255
+    img_scaled = input_img / 255.
+
     b0 = morphology.white_tophat(img_scaled, struct_elem)
     b1 = b0 * (b0 > 0.035)
     b2 = filters.gaussian(b1, sigma=1.25)
     b3 = b2 > 0.05
+
     distance = ndi.distance_transform_edt(b3)
     local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((11, 11)), labels=b3)
     markers = ndi.label(local_maxi)[0]
+
     labels = watershed(-distance, markers, mask=b3)
+
     return labels
 
 
