@@ -42,7 +42,7 @@ def extract_image_apartment_data(
 
     apt_data = core.identify_apartments(img_corrected, fid_centers_corrected, digit_dir=digit_dir)
 
-    # count the cells in each chamber -- top-hat method
+    # count the cells in each chamber -- simple percent of apartment method
     for apt in apt_data:
         apt_blob_contours, apt_blob_mask = core.find_apartment_blobs(apt['apt_region'])
 
@@ -89,6 +89,12 @@ def process_directory(
     else:
         digit_dir = None
 
+    if save_process_pics:
+        process_fig_dir = os.path.join(save_path, 'process_figures')
+        os.mkdir(process_fig_dir)
+    else:
+        process_fig_dir = None
+
     total_apt_count = 0
     apartments_per_image = []
     apt_data_df_list = []
@@ -103,6 +109,14 @@ def process_directory(
             max_cell_area,
             digit_dir
         )
+
+        if process_fig_dir is not None:
+            for apt in apt_data:
+                fig = core.render_apartment(apt)
+                fig_name = "_".join(['apt_fig', apt['image_name'], apt['row_address'], apt['col_address']])
+                fig_name = '.'.join([fig_name, 'png'])
+                fig.savefig(os.path.join(process_fig_dir, fig_name))
+                plt.close()
 
         apt_count = len(apt_data)
         total_apt_count += apt_count

@@ -303,6 +303,13 @@ def render_apartment(apt_dict):
     apt_reg_ax.axes.get_yaxis().set_visible(False)
     apt_reg_ax.imshow(apt_dict['apt_region'], cmap='gray', vmin=0, vmax=255)
 
+    if 'blob_mask_simple' in apt_dict:
+        apt_reg_ax = fig.add_subplot(gs[:, 1])
+        apt_reg_ax.set_title('Cell Blobs')
+        apt_reg_ax.axes.get_xaxis().set_visible(False)
+        apt_reg_ax.axes.get_yaxis().set_visible(False)
+        apt_reg_ax.imshow(apt_dict['blob_mask_simple'], cmap='gray', vmin=0, vmax=255)
+
     row_reg_ax = fig.add_subplot(gs[0, 2])
     row_reg_ax.set_title('Row: %s' % ''.join(apt_dict['row_digits']))
     row_reg_ax.axes.get_xaxis().set_visible(False)
@@ -314,6 +321,22 @@ def render_apartment(apt_dict):
     col_reg_ax.axes.get_xaxis().set_visible(False)
     col_reg_ax.axes.get_yaxis().set_visible(False)
     col_reg_ax.imshow(apt_dict['col_region'], cmap='gray', vmin=0, vmax=255)
+
+    if 'cell_count_simple_min' in apt_dict:
+        text_str = '\n'.join(
+            (
+                r'cell count (min): %d' % apt_dict['cell_count_simple_min'],
+                r'cell count (max): %d' % apt_dict['cell_count_simple_max'],
+                r'blob area: %d' % apt_dict['blob_area'],
+                r'blob percent: %.2f%%' % (apt_dict['blob_apt_ratio'] * 100)
+            )
+        )
+
+        # place a text box w/ stats in lower right subplot
+        text_ax = fig.add_subplot(gs[2, 2])
+        text_ax.axes.get_xaxis().set_visible(False)
+        text_ax.axes.get_yaxis().set_visible(False)
+        text_ax.text(0.05, 0.05, text_str, fontsize=12, verticalalignment='bottom')
 
     return fig
 
