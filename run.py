@@ -20,7 +20,7 @@ from cell_counter import cell_counter
     '--max_cell_area', default=400, show_default=True,
     help="""sets maximum number of pixels to consider a cell""")
 @click.option(
-    '--save_process_pics', type=bool, default=False, show_default=True,
+    '--save_process_pics', type=bool, default=True, show_default=True,
     help="""set to 1 to save images of all applied image processing steps""")
 @click.option(
     '--save_digit_images', type=bool, default=False, show_default=True,
