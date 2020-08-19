@@ -23,6 +23,7 @@ for _ref_digit in range(10):
     dig_refs.append(dig_ref)
 
 kernel_rect_3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+kernel_cross_3 = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 
 # get contour of a single empty apartment for masking
 apt_ref_path = 'cell-counter/resources/apt_ref.tif'
@@ -73,35 +74,36 @@ def filter_contours_by_size(mask, min_size, max_size=None):
     ret, thresh = cv2.threshold(mask, 1, 255, cv2.THRESH_BINARY)
     contours, hierarchy = cv2.findContours(
         thresh,
-        cv2.RETR_EXTERNAL,
+        cv2.RETR_CCOMP,
         cv2.CHAIN_APPROX_SIMPLE
     )
 
     if max_size is None:
         max_size = mask.shape[0] * mask.shape[1]
-    min_size = min_size
 
-    good_contours = []
+    filtered_mask = thresh.copy()
 
-    for c in contours:
+    for i, c in enumerate(contours):
         # test the bounding area first, since it's quicker than rendering each contour
         rect = cv2.boundingRect(c)
         rect_area = rect[2] * rect[3]
 
-        if max_size >= rect_area >= min_size:
+        if rect_area > max_size or rect_area <= min_size:
             # Using a new blank mask to calculate actual size of each contour
             # because cv2.contourArea calculates the area using the Green
             # formula, which can give a different result than the number of
             # non-zero pixels.
             tmp_mask = np.zeros(mask.shape)
-            cv2.drawContours(tmp_mask, [c], -1, 1, cv2.FILLED)
+            cv2.drawContours(tmp_mask, contours, i, 1, cv2.FILLED, hierarchy=hierarchy)
 
-            true_area = tmp_mask.sum()
+            true_area = (tmp_mask > 0).sum()
 
-            if max_size >= true_area >= min_size:
-                good_contours.append(c)
+            if true_area > max_size or true_area <= min_size:
+                # Black-out contour pixels
+                # TODO: Should probably collect the "bad" contours and erase them all at once
+                cv2.drawContours(filtered_mask, contours, i, 0, cv2.FILLED)
 
-    return good_contours
+    return filtered_mask
 
 
 def split_multi_cell(signal_img, multi_cell_mask, max_cell_area, plot=False):
