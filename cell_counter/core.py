@@ -294,93 +294,136 @@ def identify_digits(sub_region, max_number=999, save_dir=None):
 
 
 def render_apartment(apt_dict):
-    fig = plt.figure(constrained_layout=True)
-    gs = fig.add_gridspec(3, 3)
+    # determine number of columns to plot
+    col_count = 2  # default has 2 columns: pre-proc image & row/col address regions (w/metadata)
+    edge_mask = False
+    non_edge_mask = False
+    if 'edge_mask' in apt_dict:
+        edge_mask = True
+        col_count += 1
+    if 'non_edge_mask' in apt_dict:
+        non_edge_mask = True
+        col_count += 1
 
-    apt_reg_ax = fig.add_subplot(gs[:, 0])
-    apt_reg_ax.set_title('Apt Region')
+    fig = plt.figure(constrained_layout=True)
+    gs = fig.add_gridspec(ncols=col_count, nrows=4)
+
+    current_col = 0
+
+    apt_reg_ax = fig.add_subplot(gs[:, current_col])
+    apt_reg_ax.set_title('Apt Region', fontsize=11)
     apt_reg_ax.axes.get_xaxis().set_visible(False)
     apt_reg_ax.axes.get_yaxis().set_visible(False)
     apt_reg_ax.imshow(apt_dict['apt_region'], cmap='gray', vmin=0, vmax=255)
 
-    if 'blob_mask_simple' in apt_dict:
-        apt_reg_ax = fig.add_subplot(gs[:, 1])
-        apt_reg_ax.set_title('Cell Blobs')
+    current_col += 1
+
+    if edge_mask:
+        apt_reg_ax = fig.add_subplot(gs[:, current_col])
+        apt_reg_ax.set_title('Edge Blobs', fontsize=11)
         apt_reg_ax.axes.get_xaxis().set_visible(False)
         apt_reg_ax.axes.get_yaxis().set_visible(False)
-        apt_reg_ax.imshow(apt_dict['blob_mask_simple'], cmap='gray', vmin=0, vmax=255)
+        apt_reg_ax.imshow(apt_dict['edge_mask'], cmap='gray', vmin=0, vmax=255)
 
-    row_reg_ax = fig.add_subplot(gs[0, 2])
-    row_reg_ax.set_title('Row: %s' % ''.join(apt_dict['row_digits']))
+        current_col += 1
+
+    if non_edge_mask:
+        apt_reg_ax = fig.add_subplot(gs[:, current_col])
+        apt_reg_ax.set_title('Non-edge Blobs', fontsize=11)
+        apt_reg_ax.axes.get_xaxis().set_visible(False)
+        apt_reg_ax.axes.get_yaxis().set_visible(False)
+        apt_reg_ax.imshow(apt_dict['non_edge_mask'], cmap='gray', vmin=0, vmax=255)
+
+        current_col += 1
+
+    row_reg_ax = fig.add_subplot(gs[0, current_col])
+    row_reg_ax.set_title('Row: %s' % ''.join(apt_dict['row_digits']), fontsize=11)
     row_reg_ax.axes.get_xaxis().set_visible(False)
     row_reg_ax.axes.get_yaxis().set_visible(False)
     row_reg_ax.imshow(apt_dict['row_region'], cmap='gray', vmin=0, vmax=255)
 
-    col_reg_ax = fig.add_subplot(gs[1, 2])
-    col_reg_ax.set_title('Col: %s' % ''.join(apt_dict['col_digits']))
+    col_reg_ax = fig.add_subplot(gs[1, current_col])
+    col_reg_ax.set_title('Col: %s' % ''.join(apt_dict['col_digits']), fontsize=11)
     col_reg_ax.axes.get_xaxis().set_visible(False)
     col_reg_ax.axes.get_yaxis().set_visible(False)
     col_reg_ax.imshow(apt_dict['col_region'], cmap='gray', vmin=0, vmax=255)
 
-    if 'cell_count_simple_min' in apt_dict:
-        text_str = '\n'.join(
+    if 'edge_cell_count_min' in apt_dict:
+        edge_text_str = '\n'.join(
             (
-                r'cell count (min): %d' % apt_dict['cell_count_simple_min'],
-                r'cell count (max): %d' % apt_dict['cell_count_simple_max'],
-                r'blob area: %d' % apt_dict['blob_area'],
-                r'blob percent: %.2f%%' % (apt_dict['blob_apt_ratio'] * 100)
+                r'Edge stats:',
+                r'count min: %d' % apt_dict['edge_cell_count_min'],
+                r'count max: %d' % apt_dict['edge_cell_count_max'],
+                r'area: %d' % apt_dict['edge_blob_area'],
+                r'percent: %.1f%%' % (apt_dict['edge_blob_apt_ratio'] * 100)
+            )
+        )
+        non_edge_text_str = '\n'.join(
+            (
+                r'Non-edge stats:',
+                r'count min: %d' % apt_dict['non_edge_cell_count_min'],
+                r'count max: %d' % apt_dict['non_edge_cell_count_max'],
+                r'area: %d' % apt_dict['non_edge_blob_area'],
+                r'percent: %.1f%%' % (apt_dict['non_edge_blob_apt_ratio'] * 100)
             )
         )
 
         # place a text box w/ stats in lower right subplot
-        text_ax = fig.add_subplot(gs[2, 2])
-        text_ax.axes.get_xaxis().set_visible(False)
-        text_ax.axes.get_yaxis().set_visible(False)
-        text_ax.text(0.05, 0.05, text_str, fontsize=12, verticalalignment='bottom')
+        edge_text_ax = fig.add_subplot(gs[2, current_col])
+        edge_text_ax.axis('off')
+        edge_text_ax.text(0, 0, edge_text_str, fontsize=10, verticalalignment='bottom')
+
+        non_edge_text_ax = fig.add_subplot(gs[3, current_col])
+        non_edge_text_ax.axis('off')
+        non_edge_text_ax.text(0, 0, non_edge_text_str, fontsize=10, verticalalignment='bottom')
 
     return fig
 
 
 def find_apartment_blobs(apt_img):
+    region_shape = apt_img.shape
+
     blur_median = cv2.medianBlur(apt_img, 7)
     blur_bilateral = cv2.bilateralFilter(apt_img, 7, 5, 31)
 
-    # not really a diff of Gaussians, but still a diff of blurs
-    # The bilateral blur retains edge features while blurring the background,
-    # where the median blur is more extreme.
-    # By subtracting the heavy median blur, the goal is to remove the noise
-    # while retaining the edge features
+    # Next, we perform a pseudo DoG, though it's not really a diff of
+    # Gaussian's, but still a diff of blurs. The bilateral blur retains
+    # edge features while blurring the background, where the median blur
+    # is less selective.By subtracting the heavy median blur. The goal
+    # is to remove the noise while retaining the edge features, and the
+    # blur images are cast to  signed 16 bit to allow for negative values
+    # from the result of the subtraction.
     dog_img = blur_bilateral.astype(np.int16) - blur_median.astype(np.int16)
 
     # Next, sample the background from a circle outside the apartment,
     # taking the min value of the background sample to use as a threshold
-    bkg_mask = np.zeros(dog_img.shape)
+    bkg_mask = np.zeros(region_shape)
     bkg_mask = cv2.circle(bkg_mask, (7, 195), 5, 1, -1)
     bkg_mask = bkg_mask.astype(np.bool)
 
     bkg_min = dog_img[bkg_mask].min()
 
-    # Edges in the apartment image are darker than the background,
-    # so set all dark pixels to 255, and set all pixels outside the
-    # apartment mask to zero
-    dog_img2 = np.zeros(dog_img.shape)
-    dog_img2[(dog_img < bkg_min)] = 255
-    dog_img = dog_img2.astype(np.uint8)
+    # Feature edges in the apartment image are darker than background,
+    # so set all dark pixels to 255
+    dog_img_tmp = np.zeros(region_shape)
+    dog_img_tmp[dog_img < bkg_min] = 255
+    dog_img = dog_img_tmp.astype(np.uint8)
+
+    # set all pixels outside the apt reference mask to zero
     dog_img[~utils.apt_ref_mask] = 0
 
-    # There can still be noise leftover, but it is mostly at the
-    # apartment edges and the noise regions are relatively small.
-    # Still, we can safely eliminate more of them by filtering on size
-    good_contours = utils.filter_contours_by_size(dog_img, min_size=8)
+    # May be noise leftover, but mostly at the apartment edges
+    # and the noise regions are relatively small. Eliminate them
+    # by filtering on size, rather than using morphological opening,
+    # as it is non-destructive to the filtered contours.
+    dog_img = utils.filter_contours_by_size(dog_img, min_size=8)
 
     # At this point, we should have isolated the cell boundaries,
     # though their borders are frequently broken, with the interior
     # of cells not being filled. We will attempt to connect broken
     # borders by dilating with a 3x3 rectangle kernel, followed by
     # taking their convex hull to help fill gaps.
-    contour_mask = np.zeros(dog_img.shape, dtype=np.uint8)
-    cv2.drawContours(contour_mask, good_contours, -1, 255, cv2.FILLED)
-    contour_mask = cv2.dilate(contour_mask, utils.kernel_rect_3, 1)
+    contour_mask = cv2.dilate(dog_img, utils.kernel_rect_3, iterations=1)
 
     connected_contours, hierarchy = cv2.findContours(
         contour_mask,
@@ -388,20 +431,58 @@ def find_apartment_blobs(apt_img):
         cv2.CHAIN_APPROX_SIMPLE
     )
 
-    processed_contours = []
+    edge_based_contours = []
 
     for c in connected_contours:
-        proc_c = cv2.convexHull(c)
-        processed_contours.append(proc_c)
+        convex_c = cv2.convexHull(c)
+        edge_based_contours.append(convex_c)
 
     # The result should have the majority of gaps and cell interiors
     # filled, but the result is slightly over-segmented due to the
     # previous dilation. We erode by the same kernel to return to
     # a closer match to the original cell boundaries
-    final_mask = np.zeros(dog_img.shape, dtype=np.uint8)
-    cv2.drawContours(final_mask, processed_contours, -1, 255, cv2.FILLED)
+    final_edge_based_mask = np.zeros(region_shape, dtype=np.uint8)
+    cv2.drawContours(final_edge_based_mask, edge_based_contours, -1, 255, cv2.FILLED)
 
-    final_mask = cv2.erode(final_mask, utils.kernel_rect_3, 1)
-    final_mask[~utils.apt_ref_mask] = 0
+    final_edge_based_mask = cv2.erode(final_edge_based_mask, utils.kernel_rect_3, 1)
+    final_edge_based_mask[~utils.apt_ref_mask] = 0
 
-    return processed_contours, final_mask
+    # START 2ND BLOB DETECTION METHOD - NON-EDGE BASED
+    bkg_bilat_min = blur_bilateral[bkg_mask].min()
+
+    # Feature edges in the apartment image are darker than background,
+    # so set all dark pixels to 255
+    bilat_mask_tmp = np.zeros(region_shape, dtype=np.uint8)
+    bilat_mask_tmp[blur_bilateral < bkg_bilat_min] = 255
+
+    bilat_mask_tmp = utils.filter_contours_by_size(bilat_mask_tmp, min_size=9)
+
+    bilat_mask_tmp = cv2.dilate(bilat_mask_tmp, utils.kernel_cross_3, iterations=3)
+    bilat_mask_tmp = cv2.erode(bilat_mask_tmp, utils.kernel_cross_3, iterations=3)
+    bilat_mask_tmp = ~bilat_mask_tmp
+    bilat_mask_tmp[~utils.apt_ref_mask] = 0
+
+    contours, hierarchy = cv2.findContours(
+        bilat_mask_tmp,
+        cv2.RETR_LIST,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    final_non_edge_contours = []
+
+    for c in contours:
+        c_mask = np.zeros(region_shape)
+        cv2.drawContours(c_mask, [c], -1, 1, cv2.FILLED)
+
+        c_area = (c_mask > 0).sum()
+        union_area = np.logical_and(final_edge_based_mask, c_mask).sum()
+
+        union_ratio = union_area / float(c_area)
+
+        if union_ratio >= 0.5:
+            final_non_edge_contours.append(c)
+
+    final_non_edge_mask = np.zeros(region_shape)
+    cv2.drawContours(final_non_edge_mask, final_non_edge_contours, -1, 255, cv2.FILLED)
+
+    return edge_based_contours, final_edge_based_mask, final_non_edge_contours, final_non_edge_mask
