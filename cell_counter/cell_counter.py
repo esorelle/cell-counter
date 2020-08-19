@@ -44,20 +44,31 @@ def extract_image_apartment_data(
 
     # count the cells in each chamber -- simple percent of apartment method
     for apt in apt_data:
-        apt_blob_contours, apt_blob_mask = core.find_apartment_blobs(apt['apt_region'])
+        edge_contours, edge_mask, non_edge_contours, non_edge_mask = core.find_apartment_blobs(apt['apt_region'])
 
-        blob_area = (apt_blob_mask > 0).sum()
-        blob_apt_ratio = blob_area / utils.apt_ref_area
-        min_cell_count = round(blob_area / max_cell_area)
-        max_cell_count = round(blob_area / min_cell_area)
+        edge_blob_area = (edge_mask > 0).sum()
+        edge_blob_apt_ratio = edge_blob_area / utils.apt_ref_area
+        edge_cell_count_min = round(edge_blob_area / max_cell_area)
+        edge_cell_count_max = round(edge_blob_area / min_cell_area)
+
+        non_edge_blob_area = (non_edge_mask > 0).sum()
+        non_edge_blob_apt_ratio = non_edge_blob_area / utils.apt_ref_area
+        non_edge_cell_count_min = round(non_edge_blob_area / (0.75 * max_cell_area))
+        non_edge_cell_count_max = round(non_edge_blob_area / (0.75 * min_cell_area))
 
         apt['image_name'] = img_base_name
-        apt['blob_area'] = blob_area
-        apt['blob_apt_ratio'] = blob_apt_ratio
-        apt['cell_count_simple_min'] = min_cell_count
-        apt['cell_count_simple_max'] = max_cell_count
-        apt['blob_contours_simple'] = apt_blob_contours
-        apt['blob_mask_simple'] = apt_blob_mask
+        apt['edge_blob_area'] = edge_blob_area
+        apt['edge_blob_apt_ratio'] = edge_blob_apt_ratio
+        apt['edge_cell_count_min'] = edge_cell_count_min
+        apt['edge_cell_count_max'] = edge_cell_count_max
+        apt['non_edge_blob_area'] = non_edge_blob_area
+        apt['non_edge_blob_apt_ratio'] = non_edge_blob_apt_ratio
+        apt['non_edge_cell_count_min'] = non_edge_cell_count_min
+        apt['non_edge_cell_count_max'] = non_edge_cell_count_max
+        apt['edge_contours'] = edge_contours
+        apt['edge_mask'] = edge_mask
+        apt['non_edge_contours'] = non_edge_contours
+        apt['non_edge_mask'] = non_edge_mask
 
     return apt_data
 
@@ -132,10 +143,10 @@ def process_directory(
                 'col_address',
                 'fid_x',
                 'fid_y',
-                'blob_area',
-                'blob_apt_ratio',
-                'cell_count_simple_min',
-                'cell_count_simple_max'
+                'edge_blob_area',
+                'edge_blob_apt_ratio',
+                'edge_cell_count_min',
+                'edge_cell_count_max'
             ]
         )
 
@@ -145,7 +156,7 @@ def process_directory(
 
     if count_hist:
         # TODO: can we show both min & max cell counts from the simple apt capacity method?
-        plt.hist(all_apt_data_df['cell_count_simple_min'], color='lightcoral', bins=35)
+        plt.hist(all_apt_data_df['edge_cell_count_min'], color='lightcoral', bins=35)
         plt.title('Simple Cell Count - Min')
         plt.xlabel('cell count')
         plt.ylabel('# of chambers on chip')
