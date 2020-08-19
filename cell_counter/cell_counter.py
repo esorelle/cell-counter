@@ -53,14 +53,20 @@ def extract_image_apartment_data(
 
         non_edge_blob_area = (non_edge_mask > 0).sum()
         non_edge_blob_apt_ratio = non_edge_blob_area / utils.apt_ref_area
+        # TODO: I'm reducing the cell sizes by 25% for the non-edge estimate,
+        #       as the non-edge contours are typically under-sized. Maybe make
+        #       this reduction scale value an input? Or do we dilate the contours
+        #       more?
         non_edge_cell_count_min = round(non_edge_blob_area / (0.75 * max_cell_area))
         non_edge_cell_count_max = round(non_edge_blob_area / (0.75 * min_cell_area))
 
         apt['image_name'] = img_base_name
+        apt['edge_blob_count'] = len(edge_contours)
         apt['edge_blob_area'] = edge_blob_area
         apt['edge_blob_apt_ratio'] = edge_blob_apt_ratio
         apt['edge_cell_count_min'] = edge_cell_count_min
         apt['edge_cell_count_max'] = edge_cell_count_max
+        apt['non_edge_blob_count'] = len(non_edge_contours)
         apt['non_edge_blob_area'] = non_edge_blob_area
         apt['non_edge_blob_apt_ratio'] = non_edge_blob_apt_ratio
         apt['non_edge_cell_count_min'] = non_edge_cell_count_min
@@ -145,8 +151,14 @@ def process_directory(
                 'fid_y',
                 'edge_blob_area',
                 'edge_blob_apt_ratio',
+                'edge_blob_count',
                 'edge_cell_count_min',
-                'edge_cell_count_max'
+                'edge_cell_count_max',
+                'non_edge_blob_area',
+                'non_edge_blob_apt_ratio',
+                'non_edge_blob_count',
+                'non_edge_cell_count_min',
+                'non_edge_cell_count_max'
             ]
         )
 
@@ -175,7 +187,7 @@ def process_directory(
     all_apt_data_df.to_csv(
         os.path.join(
             save_path,
-            '_directory_cell_counts_%s.csv' % version
+            'directory_cell_counts_%s.csv' % version
         )
     )
 
