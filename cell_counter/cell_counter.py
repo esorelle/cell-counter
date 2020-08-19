@@ -30,15 +30,18 @@ def extract_image_apartment_data(
         img_path,
         min_cell_area,
         max_cell_area,
-        digit_dir
+        digit_dir,
+        fiducial_fig_dir=None
 ):
     input_img = plt.imread(img_path)
-    img_base_name = os.path.basename(img_path)
+    img_base_name = os.path.splitext(os.path.basename(img_path))[0]
 
     img_corrected, fid_centers_corrected = preprocess_image(input_img)
-    # fid_img = core.render_fiducials(img_corrected, fid_centers_corrected)
-    # plt.figure(figsize=(16, 16))
-    # fig = plt.imshow(fid_img)
+
+    if fiducial_fig_dir is not None:
+        fid_img = core.render_fiducials(img_corrected, fid_centers_corrected)
+        fid_img_name = "_".join(['fiducial_fig', img_base_name])
+        utils.save_image(fid_img, fiducial_fig_dir, fid_img_name)
 
     apt_data = core.identify_apartments(img_corrected, fid_centers_corrected, digit_dir=digit_dir)
 
@@ -107,10 +110,13 @@ def process_directory(
         digit_dir = None
 
     if save_process_pics:
-        process_fig_dir = os.path.join(save_path, 'process_figures')
-        os.mkdir(process_fig_dir)
+        apt_fig_dir = os.path.join(save_path, 'apartment_figures')
+        os.mkdir(apt_fig_dir)
+        fid_fig_dir = os.path.join(save_path, 'fiducial_figures')
+        os.mkdir(fid_fig_dir)
     else:
-        process_fig_dir = None
+        apt_fig_dir = None
+        fid_fig_dir = None
 
     total_apt_count = 0
     apartments_per_image = []
@@ -124,15 +130,16 @@ def process_directory(
             img_path,
             min_cell_area,
             max_cell_area,
-            digit_dir
+            digit_dir,
+            fiducial_fig_dir=fid_fig_dir
         )
 
-        if process_fig_dir is not None:
+        if apt_fig_dir is not None:
             for apt in apt_data:
                 fig = core.render_apartment(apt)
                 fig_name = "_".join(['apt_fig', apt['image_name'], apt['row_address'], apt['col_address']])
                 fig_name = '.'.join([fig_name, 'png'])
-                fig.savefig(os.path.join(process_fig_dir, fig_name))
+                fig.savefig(os.path.join(apt_fig_dir, fig_name))
                 plt.close()
 
         apt_count = len(apt_data)
