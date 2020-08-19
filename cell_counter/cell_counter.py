@@ -90,7 +90,7 @@ def process_directory(
         save_digit_images,
         count_hist=False
 ):
-    version = 'v20200617'
+    version = 'v20200819'
     time_stamp = dt.now().strftime('%Y_%m_%d_%H_%M_%S')
 
     save_path = 'analysis_%s' % time_stamp
