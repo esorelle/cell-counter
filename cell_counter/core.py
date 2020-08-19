@@ -305,8 +305,8 @@ def render_apartment(apt_dict):
         non_edge_mask = True
         col_count += 1
 
-    fig = plt.figure(constrained_layout=True)
-    gs = fig.add_gridspec(ncols=col_count, nrows=4)
+    fig = plt.figure(constrained_layout=True, figsize=(2.1 * col_count, 5))
+    gs = fig.add_gridspec(ncols=col_count, nrows=4, height_ratios=[1, 1, 3, 3])
 
     current_col = 0
 
@@ -352,6 +352,7 @@ def render_apartment(apt_dict):
         edge_text_str = '\n'.join(
             (
                 r'Edge stats:',
+                r'blob cnt: %d' % apt_dict['edge_blob_count'],
                 r'count min: %d' % apt_dict['edge_cell_count_min'],
                 r'count max: %d' % apt_dict['edge_cell_count_max'],
                 r'area: %d' % apt_dict['edge_blob_area'],
@@ -361,6 +362,7 @@ def render_apartment(apt_dict):
         non_edge_text_str = '\n'.join(
             (
                 r'Non-edge stats:',
+                r'blob cnt: %d' % apt_dict['non_edge_blob_count'],
                 r'count min: %d' % apt_dict['non_edge_cell_count_min'],
                 r'count max: %d' % apt_dict['non_edge_cell_count_max'],
                 r'area: %d' % apt_dict['non_edge_blob_area'],
@@ -371,11 +373,11 @@ def render_apartment(apt_dict):
         # place a text box w/ stats in lower right subplot
         edge_text_ax = fig.add_subplot(gs[2, current_col])
         edge_text_ax.axis('off')
-        edge_text_ax.text(0, 0, edge_text_str, fontsize=10, verticalalignment='bottom')
+        edge_text_ax.text(0, 0.05, edge_text_str, fontsize=10, verticalalignment='bottom')
 
         non_edge_text_ax = fig.add_subplot(gs[3, current_col])
         non_edge_text_ax.axis('off')
-        non_edge_text_ax.text(0, 0, non_edge_text_str, fontsize=10, verticalalignment='bottom')
+        non_edge_text_ax.text(0, 0.95, non_edge_text_str, fontsize=10, verticalalignment='top')
 
     return fig
 
