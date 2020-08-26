@@ -20,6 +20,9 @@ from cell_counter import cell_counter
     '--max_cell_area', default=360, show_default=True,
     help="""sets maximum number of pixels to consider a cell""")
 @click.option(
+    '--flip', default=False, show_default=True,
+    help="""whether to flip the images horizontally""")
+@click.option(
     '--save_process_pics', type=bool, default=True, show_default=True,
     help="""set to 1 to save images of all applied image processing steps""")
 @click.option(
@@ -32,6 +35,7 @@ def cli(
         target_directory,
         min_cell_area,
         max_cell_area,
+        flip,
         save_process_pics,
         save_digit_images,
         count_hist,
@@ -41,6 +45,7 @@ def cli(
         target_directory,
         min_cell_area,
         max_cell_area,
+        flip,
         save_process_pics,
         save_digit_images,
         count_hist

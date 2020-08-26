@@ -30,13 +30,14 @@ def extract_image_apartment_data(
         img_path,
         min_cell_area,
         max_cell_area,
+        flip,
         digit_dir,
         fiducial_fig_dir=None
 ):
     input_img = plt.imread(img_path)
     img_base_name = os.path.splitext(os.path.basename(img_path))[0]
 
-    img_corrected, fid_centers_corrected = preprocess_image(input_img)
+    img_corrected, fid_centers_corrected = preprocess_image(input_img, flip)
 
     if fiducial_fig_dir is not None:
         fid_img = core.render_fiducials(img_corrected, fid_centers_corrected)
@@ -86,6 +87,7 @@ def process_directory(
         target_directory,
         min_cell_area,
         max_cell_area,
+        flip,
         save_process_pics,
         save_digit_images,
         count_hist=False
@@ -130,6 +132,7 @@ def process_directory(
             img_path,
             min_cell_area,
             max_cell_area,
+            flip,
             digit_dir,
             fiducial_fig_dir=fid_fig_dir
         )
