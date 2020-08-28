@@ -4,6 +4,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
+import warnings
 
 
 from cell_counter import utils
@@ -21,7 +22,7 @@ def light_correction(input_img):
     return img_corr
 
 
-def find_fiducial_locations(input_img, threshold=0.7):
+def find_fiducial_locations(input_img, threshold=0.6):
     res = cv2.matchTemplate(input_img, utils.fid_ref, cv2.TM_CCOEFF_NORMED)
 
     contours, hierarchy = cv2.findContours(
@@ -130,8 +131,8 @@ def render_fiducials(input_img, fiducial_locations):
         y = fid_loc[1]
 
         #  draw a cross using 2 lines
-        cv2.line(new_img, (x - 5, y), (x + 5, y), (60, 220, 60), 2, cv2.LINE_4)
-        cv2.line(new_img, (x, y - 5), (x, y + 5), (60, 220, 60), 2, cv2.LINE_4)
+        cv2.line(new_img, (x - 9, y), (x + 9, y), (60, 220, 60), 4, cv2.LINE_4)
+        cv2.line(new_img, (x, y - 9), (x, y + 9), (60, 220, 60), 4, cv2.LINE_4)
 
     return new_img
 
@@ -139,10 +140,10 @@ def render_fiducials(input_img, fiducial_locations):
 def is_edge_fiducial(img_size, x, y):
     img_h, img_w = img_size
 
-    fiducial_right_margin = 45
-    fiducial_left_margin = 96
-    fiducial_top_margin = 170
-    fiducial_bottom_margin = 45
+    fiducial_right_margin = 90
+    fiducial_left_margin = 305
+    fiducial_top_margin = 340
+    fiducial_bottom_margin = 90
 
     if x > img_w - fiducial_right_margin or x < fiducial_left_margin:
         return True
@@ -173,25 +174,25 @@ def identify_apartments(input_img, fiducial_locations, digit_dir=None):
     # The character height is roughly 32 pixels.
     # The region width is roughly 54 pixels, and this number is chosen to
     # be equally divided by the 3 characters (so we can separate the three digits)
-    char_height = 26
-    char_width = 17
+    char_height = 52
+    char_width = 34
     char_width_3x = char_width * 3
 
-    row_offset_x1 = 8
+    row_offset_x1 = 17
     row_offset_x2 = row_offset_x1 - char_width_3x
-    row_offset_y1 = 99
+    row_offset_y1 = 209
     row_offset_y2 = row_offset_y1 + char_height
 
-    col_offset_x1 = 148
+    col_offset_x1 = 305
     col_offset_x2 = col_offset_x1 - char_width_3x
-    col_offset_y1 = 0
+    col_offset_y1 = 3
     col_offset_y2 = col_offset_y1 + char_height
 
-    apt_w = 88
-    apt_h = 218
-    apt_offset_x1 = 98
+    apt_w = 180
+    apt_h = 449
+    apt_offset_x1 = 200
     apt_offset_x2 = apt_offset_x1 - apt_w
-    apt_offset_y1 = 172
+    apt_offset_y1 = 356
     apt_offset_y2 = apt_offset_y1 - apt_h
 
     # Dictionary for apartment data, keys are fiducial index, value is a dictionary with keys:
@@ -282,7 +283,10 @@ def identify_digits(sub_region, max_number=999, save_dir=None):
     for i, sub_r in enumerate(split_regions):
         if save_dir is not None:
             digit_file_name = 'digit_%s_%d' % (dt.now().strftime('%Y%m%d%H%M%S%f'), i)
-            utils.save_image(sub_r, save_dir, digit_file_name)
+            try:
+                utils.save_image(sub_r, save_dir, digit_file_name)
+            except cv2.error:
+                warnings.warn("Failed to save digit sub-region", UserWarning)
             # sleep for a milli-second to avoid duplicate file names
             time.sleep(0.001)
 
