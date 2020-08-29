@@ -14,13 +14,16 @@ fid_ref = np.asarray(fid_ref)
 
 dig_ref_dir = 'cell-counter/resources/dig_ref_v3'
 
-
-dig_refs = []
+# Each digit can have multiple reference images, representing different
+# qualities and features (defects, etc.) that can be found in the chip
+# production and image acquisition.
+dig_refs = {i: [] for i in range(10)}
 for _ref_digit in range(10):
     dig_tif_files = glob.glob(os.path.join(dig_ref_dir, str(_ref_digit), '*.tif'))
-    dig_ref = Image.open(dig_tif_files[0])
-    dig_ref = np.asarray(dig_ref)
-    dig_refs.append(dig_ref)
+    for f in dig_tif_files:
+        dig_ref = Image.open(f)
+        dig_ref = np.asarray(dig_ref)
+        dig_refs[_ref_digit].append(dig_ref)
 
 kernel_rect_3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 kernel_cross_3 = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
@@ -60,12 +63,21 @@ def identify_digit(dig_region, digit_candidates=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)):
     # changes from median padding to avoid error...see if this works
     dig_region_pad = np.pad(dig_region, 10, mode='constant', constant_values=(128, 128))
     scores = []
-    for i, ref_digit in enumerate(dig_refs):
+    for i in range(10):
         if i not in digit_candidates:
             scores.append(0.0)
             continue
-        res = cv2.matchTemplate(dig_region_pad, ref_digit, cv2.TM_CCOEFF_NORMED)
-        scores.append(res.max())
+
+        # each digit can have multiple references,
+        # test each one, saving the best score
+        best_score = 0.0
+        for ref_digit in dig_refs[i]:
+            res = cv2.matchTemplate(dig_region_pad, ref_digit, cv2.TM_CCOEFF_NORMED)
+            new_score = res.max()
+            if new_score > best_score:
+                best_score = new_score
+
+        scores.append(best_score)
 
     return np.argmax(scores), np.max(scores)
 
