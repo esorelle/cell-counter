@@ -404,7 +404,7 @@ def find_apartment_blobs(apt_img):
     # Next, sample the background from a circle outside the apartment,
     # taking the min value of the background sample to use as a threshold
     bkg_mask = np.zeros(region_shape)
-    bkg_mask = cv2.circle(bkg_mask, (7, 195), 5, 1, -1)
+    bkg_mask = cv2.circle(bkg_mask, (11, 400), 9, 1, -1)
     bkg_mask = bkg_mask.astype(np.bool)
 
     bkg_min = dog_img[bkg_mask].min()
