@@ -2,3 +2,4 @@
 venv
 *.png
 *.pyc
+.ipynb_checkpoints/
