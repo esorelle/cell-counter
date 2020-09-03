@@ -389,8 +389,8 @@ def render_apartment(apt_dict):
 def find_apartment_blobs(apt_img):
     region_shape = apt_img.shape
 
-    blur_median = cv2.medianBlur(apt_img, 7)
-    blur_bilateral = cv2.bilateralFilter(apt_img, 7, 5, 31)
+    blur_median = cv2.medianBlur(apt_img, ksize=7)
+    blur_bilateral = cv2.bilateralFilter(apt_img, d=7, sigmaColor=5, sigmaSpace=31)
 
     # Next, we perform a pseudo DoG, though it's not really a diff of
     # Gaussian's, but still a diff of blurs. The bilateral blur retains
