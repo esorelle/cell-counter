@@ -7,6 +7,8 @@ from datetime import datetime as dt
 
 from cell_counter import utils, core
 
+VERSION = 'v20200903'
+
 
 def preprocess_image(input_img, flip_horizontal=True):
     if flip_horizontal:
@@ -92,7 +94,6 @@ def process_directory(
         save_digit_images,
         count_hist=False
 ):
-    version = 'v20200819'
     time_stamp = dt.now().strftime('%Y_%m_%d_%H_%M_%S')
 
     save_path = 'analysis_%s' % time_stamp
@@ -197,7 +198,7 @@ def process_directory(
     all_apt_data_df.to_csv(
         os.path.join(
             save_path,
-            'directory_cell_counts_%s.csv' % version
+            'directory_cell_counts_%s.csv' % VERSION
         )
     )
 
@@ -208,7 +209,7 @@ def process_directory(
 
     metadata.write('data_location: %s\n' % target_directory)
     metadata.write('datetime: %s\n' % time_stamp)
-    metadata.write('version: %s\n\n' % version)
+    metadata.write('version: %s\n\n' % VERSION)
     metadata.write('save_processing_pics: %s\n' % save_process_pics)
     metadata.write('count_histogram: %s\n' % count_hist)
     metadata.write('# of images analyzed: %d\n' % img_count)
