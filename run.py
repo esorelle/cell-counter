@@ -14,10 +14,10 @@ from cell_counter import cell_counter
     and defaults.""")
 @click.argument('target_directory', type=click.Path(exists=True))  # no help statements for required args
 @click.option(
-    '--min_cell_area', default=120, show_default=True,
+    '--min_cell_area', default=450, show_default=True,
     help="""sets minimum number of pixels to consider a cell""")
 @click.option(
-    '--max_cell_area', default=360, show_default=True,
+    '--max_cell_area', default=650, show_default=True,
     help="""sets maximum number of pixels to consider a cell""")
 @click.option(
     '--flip', default=False, show_default=True,

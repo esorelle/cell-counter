@@ -302,15 +302,19 @@ def render_apartment(apt_dict):
     col_count = 2  # default has 2 columns: pre-proc image & row/col address regions (w/metadata)
     edge_mask = False
     non_edge_mask = False
+    stdev_mask = False
     if 'edge_mask' in apt_dict:
         edge_mask = True
         col_count += 1
     if 'non_edge_mask' in apt_dict:
         non_edge_mask = True
         col_count += 1
+    if 'stdev_mask' in apt_dict:
+        stdev_mask = True
+        col_count += 1
 
     fig = plt.figure(constrained_layout=True, figsize=(2.1 * col_count, 5))
-    gs = fig.add_gridspec(ncols=col_count, nrows=4, height_ratios=[1, 1, 3, 3])
+    gs = fig.add_gridspec(ncols=col_count, nrows=5, height_ratios=[1, 1, 3, 3, 3])
 
     current_col = 0
 
@@ -340,6 +344,15 @@ def render_apartment(apt_dict):
 
         current_col += 1
 
+    if stdev_mask:
+        apt_reg_ax = fig.add_subplot(gs[:, current_col])
+        apt_reg_ax.set_title('Std Dev Blobs', fontsize=11)
+        apt_reg_ax.axes.get_xaxis().set_visible(False)
+        apt_reg_ax.axes.get_yaxis().set_visible(False)
+        apt_reg_ax.imshow(apt_dict['stdev_mask'], cmap='gray', vmin=0, vmax=1)
+
+        current_col += 1
+
     row_reg_ax = fig.add_subplot(gs[0, current_col])
     row_reg_ax.set_title('Row: %s' % ''.join(apt_dict['row_digits']), fontsize=11)
     row_reg_ax.axes.get_xaxis().set_visible(False)
@@ -356,7 +369,7 @@ def render_apartment(apt_dict):
         edge_text_str = '\n'.join(
             (
                 r'Edge stats:',
-                r'blob cnt: %d' % apt_dict['edge_blob_count'],
+                r'# blobs: %d' % apt_dict['edge_blob_count'],
                 r'count min: %d' % apt_dict['edge_cell_count_min'],
                 r'count max: %d' % apt_dict['edge_cell_count_max'],
                 r'area: %d' % apt_dict['edge_blob_area'],
@@ -366,11 +379,21 @@ def render_apartment(apt_dict):
         non_edge_text_str = '\n'.join(
             (
                 r'Non-edge stats:',
-                r'blob cnt: %d' % apt_dict['non_edge_blob_count'],
+                r'# blobs: %d' % apt_dict['non_edge_blob_count'],
                 r'count min: %d' % apt_dict['non_edge_cell_count_min'],
                 r'count max: %d' % apt_dict['non_edge_cell_count_max'],
                 r'area: %d' % apt_dict['non_edge_blob_area'],
                 r'percent: %.1f%%' % (apt_dict['non_edge_blob_apt_ratio'] * 100)
+            )
+        )
+        stdev_text_str = '\n'.join(
+            (
+                r'Std dev stats:',
+                r'# blobs: %d' % apt_dict['stdev_blob_count'],
+                r'count min: %d' % apt_dict['stdev_cell_count_min'],
+                r'count max: %d' % apt_dict['stdev_cell_count_max'],
+                r'area: %d' % apt_dict['stdev_blob_area'],
+                r'percent: %.1f%%' % (apt_dict['stdev_blob_apt_ratio'] * 100)
             )
         )
 
@@ -383,14 +406,18 @@ def render_apartment(apt_dict):
         non_edge_text_ax.axis('off')
         non_edge_text_ax.text(0, 0.95, non_edge_text_str, fontsize=10, verticalalignment='top')
 
+        stdev_text_ax = fig.add_subplot(gs[4, current_col])
+        stdev_text_ax.axis('off')
+        stdev_text_ax.text(0, 1.85, stdev_text_str, fontsize=10, verticalalignment='top')
+
     return fig
 
 
 def find_apartment_blobs(apt_img):
     region_shape = apt_img.shape
 
-    blur_median = cv2.medianBlur(apt_img, ksize=7)
-    blur_bilateral = cv2.bilateralFilter(apt_img, d=7, sigmaColor=5, sigmaSpace=31)
+    blur_median = cv2.medianBlur(apt_img, ksize=7) #7
+    blur_bilateral = cv2.bilateralFilter(apt_img, d=5, sigmaColor=5, sigmaSpace=31) #31
 
     # Next, we perform a pseudo DoG, though it's not really a diff of
     # Gaussian's, but still a diff of blurs. The bilateral blur retains
@@ -491,4 +518,54 @@ def find_apartment_blobs(apt_img):
     final_non_edge_mask = np.zeros(region_shape)
     cv2.drawContours(final_non_edge_mask, final_non_edge_contours, -1, 255, cv2.FILLED)
 
-    return edge_based_contours, final_edge_based_mask, final_non_edge_contours, final_non_edge_mask
+
+    # START 3RD BLOB DETECTION METHOD - VARIANCE-BASED
+
+    # Create pixel neighborhood blur (mean) and square root blur images
+    blur_avg = cv2.blur(apt_img ** 2, ksize=(13, 13))
+    blur_sqrt = np.sqrt(cv2.blur(apt_img ** 2, ksize=(9, 9)))
+    stdev_img = blur_sqrt - blur_avg
+    stdev_img = stdev_img.astype('uint8')
+    # plt.imshow(stdev_img)
+    # plt.show()
+
+    # calculate std dev of background image ctrl region (circle)
+    bkg_stdev = np.mean(stdev_img[bkg_mask])
+    # print('bkg stdev = ', bkg_stdev)
+
+    # create initial standard deviation mask
+    stdev_mask_tmp = stdev_img > (bkg_stdev * 1.15)
+    # plt.imshow(stdev_mask_tmp)
+    # plt.show()
+
+    # refine stdev mask with eroded apartment reference (to exclude edges)
+    erode_kernel = np.ones((19, 19), np.uint8)
+    new_ref_mask = utils.apt_ref_mask
+    new_ref_mask = new_ref_mask.astype('uint8')
+    new_ref_mask = cv2.erode(new_ref_mask, erode_kernel)
+
+    # create final_stdev_mask for cell area
+    final_stdev_mask = stdev_mask_tmp * new_ref_mask
+
+    # create and filter noise to get final_stdev_contours for blob count
+    stdev_contours, hierarchy = cv2.findContours(
+        final_stdev_mask,
+        cv2.RETR_LIST,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    threshold_area = 50
+    final_stdev_contours = []
+
+    for blob in stdev_contours:
+        area = cv2.contourArea(blob)
+        if area > threshold_area:
+             final_stdev_contours.append(blob)
+
+    # print(len(stdev_contours))
+    # print(len(final_stdev_contours))
+
+    # plt.imshow(final_stdev_mask)
+    # plt.show()
+
+    return edge_based_contours, final_edge_based_mask, final_non_edge_contours, final_non_edge_mask, final_stdev_contours, final_stdev_mask

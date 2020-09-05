@@ -50,7 +50,7 @@ def extract_image_apartment_data(
 
     # count the cells in each chamber -- simple percent of apartment method
     for apt in apt_data:
-        edge_contours, edge_mask, non_edge_contours, non_edge_mask = core.find_apartment_blobs(apt['apt_region'])
+        edge_contours, edge_mask, non_edge_contours, non_edge_mask, stdev_contours, stdev_mask = core.find_apartment_blobs(apt['apt_region'])
 
         edge_blob_area = (edge_mask > 0).sum()
         edge_blob_apt_ratio = edge_blob_area / utils.apt_ref_area
@@ -66,6 +66,12 @@ def extract_image_apartment_data(
         non_edge_cell_count_min = round(non_edge_blob_area / (0.75 * max_cell_area))
         non_edge_cell_count_max = round(non_edge_blob_area / (0.75 * min_cell_area))
 
+        # TODO: keep editing here (2020-09-05)
+        stdev_blob_area = (stdev_mask > 0).sum()
+        stdev_blob_apt_ratio = stdev_blob_area / utils.apt_ref_area
+        stdev_cell_count_min = round(stdev_blob_area / max_cell_area)
+        stdev_cell_count_max = round(stdev_blob_area / min_cell_area)
+
         apt['image_name'] = img_base_name
         apt['edge_blob_count'] = len(edge_contours)
         apt['edge_blob_area'] = edge_blob_area
@@ -77,10 +83,18 @@ def extract_image_apartment_data(
         apt['non_edge_blob_apt_ratio'] = non_edge_blob_apt_ratio
         apt['non_edge_cell_count_min'] = non_edge_cell_count_min
         apt['non_edge_cell_count_max'] = non_edge_cell_count_max
+        apt['stdev_blob_count'] = len(stdev_contours)
+        apt['stdev_blob_area'] = stdev_blob_area
+        apt['stdev_blob_apt_ratio'] = stdev_blob_apt_ratio
+        apt['stdev_cell_count_min'] = stdev_cell_count_min
+        apt['stdev_cell_count_max'] = stdev_cell_count_max
         apt['edge_contours'] = edge_contours
         apt['edge_mask'] = edge_mask
         apt['non_edge_contours'] = non_edge_contours
         apt['non_edge_mask'] = non_edge_mask
+        apt['stdev_contours'] = stdev_contours
+        apt['stdev_mask'] = stdev_mask
+
 
     return apt_data
 
@@ -169,7 +183,12 @@ def process_directory(
                 'non_edge_blob_apt_ratio',
                 'non_edge_blob_count',
                 'non_edge_cell_count_min',
-                'non_edge_cell_count_max'
+                'non_edge_cell_count_max',
+                'stdev_blob_area',
+                'stdev_blob_apt_ratio',
+                'stdev_blob_count',
+                'stdev_cell_count_min',
+                'stdev_cell_count_max'
             ]
         )
 
