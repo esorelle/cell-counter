@@ -8,11 +8,11 @@ from sklearn.feature_extraction import image as sk_image
 import matplotlib.pyplot as plt
 
 
-fid_ref_path = 'cell-counter/resources/fiducial_ref_v3.tif'
+fid_ref_path = 'resources/fiducial_ref_v3.tif'
 fid_ref = Image.open(fid_ref_path)
 fid_ref = np.asarray(fid_ref)
 
-dig_ref_dir = 'cell-counter/resources/dig_ref_v3'
+dig_ref_dir = 'resources/dig_ref_v3'
 
 # Each digit can have multiple reference images, representing different
 # qualities and features (defects, etc.) that can be found in the chip
@@ -29,7 +29,7 @@ kernel_rect_3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 kernel_cross_3 = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 
 # get contour of a single empty apartment for masking
-apt_ref_path = 'cell-counter/resources/apt_ref_v3.tif'
+apt_ref_path = 'resources/apt_ref_v3.tif'
 apt_ref_mask = Image.open(apt_ref_path)
 apt_ref_mask = np.asarray(apt_ref_mask)
 # apt_ref_mask = cv2.erode(apt_ref_mask, kernel_rect_3, iterations=3)
