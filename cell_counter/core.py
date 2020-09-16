@@ -10,8 +10,8 @@ import warnings
 from cell_counter import utils
 
 
-def light_correction(input_img):
-    img_blur = cv2.GaussianBlur(input_img, (15, 15), 1.5)
+def light_correction(input_img, kernel_size=15):
+    img_blur = cv2.GaussianBlur(input_img, (kernel_size, kernel_size), 0)
     img_corr = input_img / img_blur
 
     # Translate to zero, then normalize to 8-bit range
