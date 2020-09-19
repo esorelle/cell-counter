@@ -59,7 +59,7 @@ def make_rectangle_mask(input_blobs, blob_boundaries):
     return rect_mask
 
 
-def find_rows(fiducial_locations):
+def _find_rows(fiducial_locations):
     centers_y = [loc[1] for loc in fiducial_locations]
 
     # Rows are separated by roughly 220px, though we expect the image rotation
@@ -83,9 +83,11 @@ def find_rows(fiducial_locations):
     return rows
 
 
-def find_rotation_angle(fiducial_locations, row_membership):
+def find_rotation_angle(fiducial_locations):
+    row_membership = _find_rows(fiducial_locations)
+
     if len(row_membership) == 0:
-        raise ValueError("rows membership list cannot be empty")
+        raise ValueError("failed to locate rows of fiducial markers")
 
     r_degs = []
     for r in row_membership:
@@ -151,6 +153,56 @@ def is_edge_fiducial(img_size, x, y):
         return True
 
     return False
+
+
+def identify_digits(sub_region, max_number=999, save_dir=None):
+    """
+    Identify digits in a image sub-region containing a 3 character address identifier
+    :param sub_region: Image sub-array, should be equally divisible by 3
+    :param max_number: the maximum 3-digit number possible in the sub-region
+    :param save_dir: optional directory to save individual digit image regions
+    :return: List of tuples containing the best matching digit and the corresponding matching score for each
+        of the 3 digits
+    """
+    # determine digit candidates for each position
+    max_num_str = str(max_number)
+    max_num_len = len(max_num_str)
+    dig_position_candidates = []
+    if max_num_len == 3:
+        dig_position_candidates.append(tuple(range(int(max_num_str[0]) + 1)))
+        dig_position_candidates.append(tuple(range(10)))
+        dig_position_candidates.append(tuple(range(10)))
+    elif max_num_len == 2:
+        dig_position_candidates.append(tuple(range(1)))
+        dig_position_candidates.append(tuple(range(int(max_num_str[0]) + 1)))
+        dig_position_candidates.append(tuple(range(10)))
+    elif max_num_len == 1:
+        dig_position_candidates.append(tuple(range(1)))
+        dig_position_candidates.append(tuple(range(1)))
+        dig_position_candidates.append(tuple(range(int(max_num_str[0]) + 1)))
+    else:
+        raise ValueError("max_number must be a positive number less than 999: given %d" % max_number)
+
+    # split region into 3 equal parts, one per digit
+    split_regions = np.split(sub_region, 3, axis=1)
+    digits = []
+    scores = []
+
+    for i, sub_r in enumerate(split_regions):
+        if save_dir is not None:
+            digit_file_name = 'digit_%s_%d' % (dt.now().strftime('%Y%m%d%H%M%S%f'), i)
+            try:
+                utils.save_image(sub_r, save_dir, digit_file_name)
+            except cv2.error:
+                warnings.warn("Failed to save digit sub-region", UserWarning)
+            # sleep for a milli-second to avoid duplicate file names
+            time.sleep(0.001)
+
+        digit, score = utils.identify_digit(sub_r, digit_candidates=dig_position_candidates[i])
+        digits.append(str(digit))
+        scores.append(score)
+
+    return digits, scores
 
 
 def identify_apartments(input_img, fiducial_locations, digit_dir=None):
@@ -247,56 +299,6 @@ def identify_apartments(input_img, fiducial_locations, digit_dir=None):
     return apt_data
 
 
-def identify_digits(sub_region, max_number=999, save_dir=None):
-    """
-    Identify digits in a image sub-region containing a 3 character address identifier
-    :param sub_region: Image sub-array, should be equally divisible by 3
-    :param max_number: the maximum 3-digit number possible in the sub-region
-    :param save_dir: optional directory to save individual digit image regions
-    :return: List of tuples containing the best matching digit and the corresponding matching score for each
-        of the 3 digits
-    """
-    # determine digit candidates for each position
-    max_num_str = str(max_number)
-    max_num_len = len(max_num_str)
-    dig_position_candidates = []
-    if max_num_len == 3:
-        dig_position_candidates.append(tuple(range(int(max_num_str[0]) + 1)))
-        dig_position_candidates.append(tuple(range(10)))
-        dig_position_candidates.append(tuple(range(10)))
-    elif max_num_len == 2:
-        dig_position_candidates.append(tuple(range(1)))
-        dig_position_candidates.append(tuple(range(int(max_num_str[0]) + 1)))
-        dig_position_candidates.append(tuple(range(10)))
-    elif max_num_len == 1:
-        dig_position_candidates.append(tuple(range(1)))
-        dig_position_candidates.append(tuple(range(1)))
-        dig_position_candidates.append(tuple(range(int(max_num_str[0]) + 1)))
-    else:
-        raise ValueError("max_number must be a positive number less than 999: given %d" % max_number)
-
-    # split region into 3 equal parts, one per digit
-    split_regions = np.split(sub_region, 3, axis=1)
-    digits = []
-    scores = []
-
-    for i, sub_r in enumerate(split_regions):
-        if save_dir is not None:
-            digit_file_name = 'digit_%s_%d' % (dt.now().strftime('%Y%m%d%H%M%S%f'), i)
-            try:
-                utils.save_image(sub_r, save_dir, digit_file_name)
-            except cv2.error:
-                warnings.warn("Failed to save digit sub-region", UserWarning)
-            # sleep for a milli-second to avoid duplicate file names
-            time.sleep(0.001)
-
-        digit, score = utils.identify_digit(sub_r, digit_candidates=dig_position_candidates[i])
-        digits.append(str(digit))
-        scores.append(score)
-
-    return digits, scores
-
-
 def render_apartment(apt_dict):
     # determine number of columns to plot
     col_count = 2  # default has 2 columns: pre-proc image & row/col address regions (w/metadata)
@@ -386,16 +388,6 @@ def render_apartment(apt_dict):
                 r'percent: %.1f%%' % (apt_dict['non_edge_blob_apt_ratio'] * 100)
             )
         )
-        stdev_text_str = '\n'.join(
-            (
-                r'Std dev stats:',
-                r'# blobs: %d' % apt_dict['stdev_blob_count'],
-                r'count min: %d' % apt_dict['stdev_cell_count_min'],
-                r'count max: %d' % apt_dict['stdev_cell_count_max'],
-                r'area: %d' % apt_dict['stdev_blob_area'],
-                r'percent: %.1f%%' % (apt_dict['stdev_blob_apt_ratio'] * 100)
-            )
-        )
 
         # place a text box w/ stats in lower right subplot
         edge_text_ax = fig.add_subplot(gs[2, current_col])
@@ -406,18 +398,14 @@ def render_apartment(apt_dict):
         non_edge_text_ax.axis('off')
         non_edge_text_ax.text(0, 0.95, non_edge_text_str, fontsize=10, verticalalignment='top')
 
-        stdev_text_ax = fig.add_subplot(gs[4, current_col])
-        stdev_text_ax.axis('off')
-        stdev_text_ax.text(0, 1.85, stdev_text_str, fontsize=10, verticalalignment='top')
-
     return fig
 
 
 def find_apartment_blobs(apt_img):
     region_shape = apt_img.shape
 
-    blur_median = cv2.medianBlur(apt_img, ksize=7) #7
-    blur_bilateral = cv2.bilateralFilter(apt_img, d=5, sigmaColor=5, sigmaSpace=31) #31
+    blur_median = cv2.medianBlur(apt_img, ksize=7)  # 7
+    blur_bilateral = cv2.bilateralFilter(apt_img, d=5, sigmaColor=5, sigmaSpace=31)  # 7
 
     # Next, we perform a pseudo DoG, though it's not really a diff of
     # Gaussian's, but still a diff of blurs. The bilateral blur retains
@@ -518,54 +506,7 @@ def find_apartment_blobs(apt_img):
     final_non_edge_mask = np.zeros(region_shape)
     cv2.drawContours(final_non_edge_mask, final_non_edge_contours, -1, 255, cv2.FILLED)
 
-
-    # START 3RD BLOB DETECTION METHOD - VARIANCE-BASED
-
-    # Create pixel neighborhood blur (mean) and square root blur images
-    blur_avg = cv2.blur(apt_img ** 2, ksize=(13, 13))
-    blur_sqrt = np.sqrt(cv2.blur(apt_img ** 2, ksize=(9, 9)))
-    stdev_img = blur_sqrt - blur_avg
-    stdev_img = stdev_img.astype('uint8')
-    # plt.imshow(stdev_img)
-    # plt.show()
-
-    # calculate std dev of background image ctrl region (circle)
-    bkg_stdev = np.mean(stdev_img[bkg_mask])
-    # print('bkg stdev = ', bkg_stdev)
-
-    # create initial standard deviation mask
-    stdev_mask_tmp = stdev_img > (bkg_stdev * 1.15)
-    # plt.imshow(stdev_mask_tmp)
-    # plt.show()
-
-    # refine stdev mask with eroded apartment reference (to exclude edges)
-    erode_kernel = np.ones((19, 19), np.uint8)
-    new_ref_mask = utils.apt_ref_mask
-    new_ref_mask = new_ref_mask.astype('uint8')
-    new_ref_mask = cv2.erode(new_ref_mask, erode_kernel)
-
-    # create final_stdev_mask for cell area
-    final_stdev_mask = stdev_mask_tmp * new_ref_mask
-
-    # create and filter noise to get final_stdev_contours for blob count
-    stdev_contours, hierarchy = cv2.findContours(
-        final_stdev_mask,
-        cv2.RETR_LIST,
-        cv2.CHAIN_APPROX_SIMPLE
+    return (
+        edge_based_contours, final_edge_based_mask,
+        final_non_edge_contours, final_non_edge_mask
     )
-
-    threshold_area = 50
-    final_stdev_contours = []
-
-    for blob in stdev_contours:
-        area = cv2.contourArea(blob)
-        if area > threshold_area:
-             final_stdev_contours.append(blob)
-
-    # print(len(stdev_contours))
-    # print(len(final_stdev_contours))
-
-    # plt.imshow(final_stdev_mask)
-    # plt.show()
-
-    return edge_based_contours, final_edge_based_mask, final_non_edge_contours, final_non_edge_mask, final_stdev_contours, final_stdev_mask
