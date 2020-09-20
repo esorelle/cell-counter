@@ -57,6 +57,24 @@ def rotate(point, origin=(0, 0), degrees=0):
     return qx, qy
 
 
+def rotate_image(input_img, angle):
+    n_rows, n_cols = np.shape(input_img)
+    rot_mat = cv2.getRotationMatrix2D((n_cols/2., n_rows/2.), angle, 1)
+    img_rot = cv2.warpAffine(input_img, rot_mat, (n_cols, n_rows))
+
+    return img_rot
+
+
+def rotate_points(points, origin, angle):
+    new_points = []
+
+    for p in points:
+        rot_p = rotate(p, origin, angle)
+        new_points.append(tuple(np.round(rot_p).astype(np.int)))
+
+    return new_points
+
+
 # identify digits from templates
 def identify_digit(dig_region, digit_candidates=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)):
     # padding is crucial & needs to be about 1/2  of the template width/height
