@@ -225,18 +225,22 @@ def process_directory(
     naive_chamber_id_rate = np.around(total_apt_count / (img_count * 24.), decimals=4)
 
     metadata = open(os.path.join(save_path, 'analysis_metadata.txt'), 'w')
-
-    metadata.write('data_location: %s\n' % target_directory)
-    metadata.write('datetime: %s\n' % time_stamp)
-    metadata.write('version: %s\n\n' % VERSION)
-    metadata.write('save_processing_pics: %s\n' % save_process_pics)
-    metadata.write('count_histogram: %s\n' % count_hist)
-    metadata.write('# of images analyzed: %d\n' % img_count)
-    metadata.write('total # of chambers detected: %d\n' % total_apt_count)
-    metadata.write('naive_chamber_id_rate: %f%%\n' % (naive_chamber_id_rate * 100))
-    metadata.write('min_cell_area: %d\n' % min_cell_area)
-    metadata.write('max_cell_area: %d\n' % max_cell_area)
-
+    metadata_str = "\n".join(
+        [
+            'data_location: %s' % target_directory,
+            'datetime: %s' % time_stamp,
+            'version: %s' % VERSION,
+            '',
+            'save_processing_pics: %s' % save_process_pics,
+            'count_histogram: %s' % count_hist,
+            '# of images analyzed: %d' % img_count,
+            'total # of chambers detected: %d' % total_apt_count,
+            'naive_chamber_id_rate: %f%%' % (naive_chamber_id_rate * 100),
+            'min_cell_area: %d' % min_cell_area,
+            'max_cell_area: %d' % max_cell_area
+        ]
+    )
+    metadata.write(metadata_str)
     metadata.close()
 
     print("Naive chamber detection rate for chip: %.2f%%\n" % (naive_chamber_id_rate * 100))
