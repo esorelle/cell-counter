@@ -37,17 +37,6 @@ def find_fiducial_locations(input_img, threshold=0.6):
     return fid_centers
 
 
-def make_rectangle_mask(input_blobs, blob_boundaries):
-    rect_mask = np.zeros(np.shape(input_blobs))
-    for i in range(len(blob_boundaries['north'])):
-        south = blob_boundaries['south'][i]
-        west = blob_boundaries['west'][i]
-        east = blob_boundaries['east'][i]
-        rect_mask[south - 216:south, west - 5:east + 5] = 1
-
-    return rect_mask
-
-
 def _find_rows(fiducial_locations):
     centers_y = [loc[1] for loc in fiducial_locations]
 
