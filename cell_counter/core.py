@@ -415,6 +415,8 @@ def render_apartment(apt_dict):
 
 
 def find_apartment_blobs(apt_img):
+    # TODO: separate individual methods into their own functions and control which ones are run by
+    #       kwarg list...might not be necessary if we decide to go with a single method
     region_shape = apt_img.shape
 
     blur_median = cv2.medianBlur(apt_img, ksize=7)  # 7
