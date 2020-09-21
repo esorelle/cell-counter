@@ -47,6 +47,18 @@ def flip_horizontal(input_img):
     return flipped_img
 
 
+def light_correction(input_img, kernel_size=15):
+    img_blur = cv2.GaussianBlur(input_img, (kernel_size, kernel_size), 0)
+    img_corr = input_img / img_blur
+
+    # Translate to zero, then normalize to 8-bit range
+    img_corr = img_corr - img_corr.min()
+    img_corr = np.floor((img_corr / img_corr.max()) * 255.0)
+    img_corr = img_corr.astype(np.uint8)
+
+    return img_corr
+
+
 # defined rotation function
 def rotate(point, origin=(0, 0), degrees=0):
     angle = np.deg2rad(-degrees)

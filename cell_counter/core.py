@@ -11,18 +11,6 @@ import warnings
 from cell_counter import utils
 
 
-def light_correction(input_img, kernel_size=15):
-    img_blur = cv2.GaussianBlur(input_img, (kernel_size, kernel_size), 0)
-    img_corr = input_img / img_blur
-
-    # Translate to zero, then normalize to 8-bit range
-    img_corr = img_corr - img_corr.min()
-    img_corr = np.floor((img_corr / img_corr.max()) * 255.0)
-    img_corr = img_corr.astype(np.uint8)
-
-    return img_corr
-
-
 def find_fiducial_locations(input_img, threshold=0.6):
     res = cv2.matchTemplate(input_img, utils.fid_ref, cv2.TM_CCOEFF_NORMED)
 
@@ -97,7 +85,7 @@ def find_rotation_angle(fiducial_locations):
             continue
 
         gradient, intercept, r_value, p_value, std_err = stats.linregress(fiducial_locations[r[0]:r[-1] + 1])
-        if gradient > 1:              # 2020-05-13: override large angle adjustments (observed bug)
+        if gradient > 1:  # 2020-05-13: override large angle adjustments (observed bug)
             continue
 
         r_deg = np.degrees(np.arctan(gradient))
@@ -207,7 +195,7 @@ def identify_apartments(img_path, flip_horizontal=False, digit_dir=None, fiducia
     if flip_horizontal:
         input_img = utils.flip_horizontal(input_img)
 
-    img_light_corr = light_correction(input_img)
+    img_light_corr = utils.light_correction(input_img)
     fid_centers = find_fiducial_locations(img_light_corr)
     rot_degrees = find_rotation_angle(fid_centers)
 
@@ -353,15 +341,11 @@ def render_apartment(apt_dict):
     col_count = 2  # default has 2 columns: pre-proc image & row/col address regions (w/metadata)
     edge_mask = False
     non_edge_mask = False
-    stdev_mask = False
     if 'edge_mask' in apt_dict:
         edge_mask = True
         col_count += 1
     if 'non_edge_mask' in apt_dict:
         non_edge_mask = True
-        col_count += 1
-    if 'stdev_mask' in apt_dict:
-        stdev_mask = True
         col_count += 1
 
     fig = plt.figure(constrained_layout=True, figsize=(2.1 * col_count, 5))
@@ -392,15 +376,6 @@ def render_apartment(apt_dict):
         apt_reg_ax.axes.get_xaxis().set_visible(False)
         apt_reg_ax.axes.get_yaxis().set_visible(False)
         apt_reg_ax.imshow(apt_dict['non_edge_mask'], cmap='gray', vmin=0, vmax=255)
-
-        current_col += 1
-
-    if stdev_mask:
-        apt_reg_ax = fig.add_subplot(gs[:, current_col])
-        apt_reg_ax.set_title('Std Dev Blobs', fontsize=11)
-        apt_reg_ax.axes.get_xaxis().set_visible(False)
-        apt_reg_ax.axes.get_yaxis().set_visible(False)
-        apt_reg_ax.imshow(apt_dict['stdev_mask'], cmap='gray', vmin=0, vmax=1)
 
         current_col += 1
 
