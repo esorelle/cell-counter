@@ -40,7 +40,7 @@ def process_directory_extract_apartments(
 
     for i, img_path in enumerate(images):
         img_base_name = os.path.basename(img_path)
-        print(i, img_base_name)
+        print(i + 1, img_base_name)
 
         apt_data = core.identify_apartments(
             img_path,
