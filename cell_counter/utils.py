@@ -8,11 +8,11 @@ from sklearn.feature_extraction import image as sk_image
 import matplotlib.pyplot as plt
 
 
-fid_ref_path = 'cell-counter/resources/fiducial_ref_v3.tif'
+fid_ref_path = 'resources/fiducial_ref_v3.tif'
 fid_ref = Image.open(fid_ref_path)
 fid_ref = np.asarray(fid_ref)
 
-dig_ref_dir = 'cell-counter/resources/dig_ref_v3'
+dig_ref_dir = 'resources/dig_ref_v3'
 
 # Each digit can have multiple reference images, representing different
 # qualities and features (defects, etc.) that can be found in the chip
@@ -29,7 +29,7 @@ kernel_rect_3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 kernel_cross_3 = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 
 # get contour of a single empty apartment for masking
-apt_ref_path = 'cell-counter/resources/apt_ref_v3.tif'
+apt_ref_path = 'resources/apt_ref_v3.tif'
 apt_ref_mask = Image.open(apt_ref_path)
 apt_ref_mask = np.asarray(apt_ref_mask)
 # apt_ref_mask = cv2.erode(apt_ref_mask, kernel_rect_3, iterations=3)
@@ -47,6 +47,18 @@ def flip_horizontal(input_img):
     return flipped_img
 
 
+def light_correction(input_img, kernel_size=15):
+    img_blur = cv2.GaussianBlur(input_img, (kernel_size, kernel_size), 0)
+    img_corr = input_img / img_blur
+
+    # Translate to zero, then normalize to 8-bit range
+    img_corr = img_corr - img_corr.min()
+    img_corr = np.floor((img_corr / img_corr.max()) * 255.0)
+    img_corr = img_corr.astype(np.uint8)
+
+    return img_corr
+
+
 # defined rotation function
 def rotate(point, origin=(0, 0), degrees=0):
     angle = np.deg2rad(-degrees)
@@ -55,6 +67,24 @@ def rotate(point, origin=(0, 0), degrees=0):
     qx = ox + np.cos(angle) * (px - ox) - np.sin(angle) * (py - oy)
     qy = oy + np.sin(angle) * (px - ox) + np.cos(angle) * (py - oy)
     return qx, qy
+
+
+def rotate_image(input_img, angle):
+    n_rows, n_cols = np.shape(input_img)
+    rot_mat = cv2.getRotationMatrix2D((n_cols/2., n_rows/2.), angle, 1)
+    img_rot = cv2.warpAffine(input_img, rot_mat, (n_cols, n_rows))
+
+    return img_rot
+
+
+def rotate_points(points, origin, angle):
+    new_points = []
+
+    for p in points:
+        rot_p = rotate(p, origin, angle)
+        new_points.append(tuple(np.round(rot_p).astype(np.int)))
+
+    return new_points
 
 
 # identify digits from templates

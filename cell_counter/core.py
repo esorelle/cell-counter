@@ -1,3 +1,4 @@
+import os
 from datetime import datetime as dt
 import time
 import cv2
@@ -8,18 +9,6 @@ import warnings
 
 
 from cell_counter import utils
-
-
-def light_correction(input_img):
-    img_blur = cv2.GaussianBlur(input_img, (15, 15), 1.5)
-    img_corr = input_img / img_blur
-
-    # Translate to zero, then normalize to 8-bit range
-    img_corr = img_corr - img_corr.min()
-    img_corr = np.floor((img_corr / img_corr.max()) * 255.0)
-    img_corr = img_corr.astype(np.uint8)
-
-    return img_corr
 
 
 def find_fiducial_locations(input_img, threshold=0.6):
@@ -48,18 +37,7 @@ def find_fiducial_locations(input_img, threshold=0.6):
     return fid_centers
 
 
-def make_rectangle_mask(input_blobs, blob_boundaries):
-    rect_mask = np.zeros(np.shape(input_blobs))
-    for i in range(len(blob_boundaries['north'])):
-        south = blob_boundaries['south'][i]
-        west = blob_boundaries['west'][i]
-        east = blob_boundaries['east'][i]
-        rect_mask[south - 216:south, west - 5:east + 5] = 1
-
-    return rect_mask
-
-
-def find_rows(fiducial_locations):
+def _find_rows(fiducial_locations):
     centers_y = [loc[1] for loc in fiducial_locations]
 
     # Rows are separated by roughly 220px, though we expect the image rotation
@@ -83,9 +61,11 @@ def find_rows(fiducial_locations):
     return rows
 
 
-def find_rotation_angle(fiducial_locations, row_membership):
+def find_rotation_angle(fiducial_locations):
+    row_membership = _find_rows(fiducial_locations)
+
     if len(row_membership) == 0:
-        raise ValueError("rows membership list cannot be empty")
+        raise ValueError("failed to locate rows of fiducial markers")
 
     r_degs = []
     for r in row_membership:
@@ -94,7 +74,7 @@ def find_rotation_angle(fiducial_locations, row_membership):
             continue
 
         gradient, intercept, r_value, p_value, std_err = stats.linregress(fiducial_locations[r[0]:r[-1] + 1])
-        if gradient > 1:              # 2020-05-13: override large angle adjustments (observed bug)
+        if gradient > 1:  # 2020-05-13: override large angle adjustments (observed bug)
             continue
 
         r_deg = np.degrees(np.arctan(gradient))
@@ -103,24 +83,6 @@ def find_rotation_angle(fiducial_locations, row_membership):
     r_deg_mean = np.mean(r_degs)
 
     return r_deg_mean
-
-
-def rotate_image(input_img, angle):
-    n_rows, n_cols = np.shape(input_img)
-    rot_mat = cv2.getRotationMatrix2D((n_cols/2., n_rows/2.), angle, 1)
-    img_rot = cv2.warpAffine(input_img, rot_mat, (n_cols, n_rows))
-
-    return img_rot
-
-
-def rotate_points(points, origin, angle):
-    new_points = []
-
-    for p in points:
-        rot_p = utils.rotate(p, origin, angle)
-        new_points.append(tuple(np.round(rot_p).astype(np.int)))
-
-    return new_points
 
 
 def render_fiducials(input_img, fiducial_locations):
@@ -151,100 +113,6 @@ def is_edge_fiducial(img_size, x, y):
         return True
 
     return False
-
-
-def identify_apartments(input_img, fiducial_locations, digit_dir=None):
-    """
-    Takes input image (after rotation correction) and fiducial locations to find and return
-    the row and column sub-regions containing the row and column addresses
-
-    :param input_img: rotation corrected image
-    :param fiducial_locations: list of image coordinates where the fiducials are located
-    :param digit_dir: directory path for optionally saving individual digit sub-regions, don't save if None (default)
-    :return: Lists of extracted text regions (row list, col list), in same order as given fiducials
-    """
-    # row/col addresses are indexed at 0 (000), columns end at 127 and rows end at 46
-    # The "origin" is in the bottom right of the image (after flipping).
-    max_col = 127
-    max_row = 46
-
-    # Both column and row identifiers are 3 characters in length.
-    # From the fiducial location, the column address is found to the left,
-    # and the row address is found above.
-    # The character height is roughly 32 pixels.
-    # The region width is roughly 54 pixels, and this number is chosen to
-    # be equally divided by the 3 characters (so we can separate the three digits)
-    char_height = 52
-    char_width = 34
-    char_width_3x = char_width * 3
-
-    row_offset_x1 = 17
-    row_offset_x2 = row_offset_x1 - char_width_3x
-    row_offset_y1 = 209
-    row_offset_y2 = row_offset_y1 + char_height
-
-    col_offset_x1 = 305
-    col_offset_x2 = col_offset_x1 - char_width_3x
-    col_offset_y1 = 3
-    col_offset_y2 = col_offset_y1 + char_height
-
-    apt_w = 180
-    apt_h = 449
-    apt_offset_x1 = 200
-    apt_offset_x2 = apt_offset_x1 - apt_w
-    apt_offset_y1 = 356
-    apt_offset_y2 = apt_offset_y1 - apt_h
-
-    # Dictionary for apartment data, keys are fiducial index, value is a dictionary with keys:
-    #     - fid_coords
-    #     - row_region
-    #     - row_scores
-    #     - row_address
-    #     - col_region
-    #     - col_scores
-    #     - col_address
-    apt_data = []
-    row_text_regions = []
-    col_text_regions = []
-
-    for fid_loc in fiducial_locations:
-        # determine if fiducial is too close to an edge of the image
-        x = fid_loc[0]
-        y = fid_loc[1]
-
-        on_edge = is_edge_fiducial(input_img.shape, x, y)
-        if on_edge:
-            continue
-
-        row_region = input_img[y - row_offset_y2:y - row_offset_y1, x - row_offset_x1:x - row_offset_x2]
-        col_region = input_img[y - col_offset_y2:y - col_offset_y1, x - col_offset_x1:x - col_offset_x2]
-
-        row_text_regions.append(row_region)
-        col_text_regions.append(col_region)
-
-        row_digits, row_scores = identify_digits(row_region, max_number=max_row, save_dir=digit_dir)
-        col_digits, col_scores = identify_digits(col_region, max_number=max_col, save_dir=digit_dir)
-
-        # apt region
-        apt_region = input_img[y - apt_offset_y1:y - apt_offset_y2, x - apt_offset_x1:x - apt_offset_x2]
-
-        apt = {
-            'fid_x': fid_loc[0],
-            'fid_y': fid_loc[1],
-            'row_region': row_region,
-            'row_address': ''.join(row_digits),
-            'row_digits': row_digits,
-            'row_scores': row_scores,
-            'col_address': ''.join(col_digits),
-            'col_region': col_region,
-            'col_digits': col_digits,
-            'col_scores': col_scores,
-            'apt_region': apt_region
-        }
-
-        apt_data.append(apt)
-
-    return apt_data
 
 
 def identify_digits(sub_region, max_number=999, save_dir=None):
@@ -297,6 +165,166 @@ def identify_digits(sub_region, max_number=999, save_dir=None):
     return digits, scores
 
 
+def identify_apartments(img_path, flip_horizontal=False, digit_dir=None, fiducial_dir=None, apt_region_dir=None):
+    """
+    Takes input image (after rotation correction) and fiducial locations to find and return
+    the row and column sub-regions containing the row and column addresses
+
+    :param img_path: path to image to extract apartment data
+    :param flip_horizontal: whether to flip the given image horizontally, default is False
+    :param digit_dir: path for saving individual digit sub-regions, don't save if None (default)
+    :param fiducial_dir: path for saving image of fiducial locations, don't save if None (default)
+    :param apt_region_dir: path for saving individual apartment sub-regions, don't save if None (default)
+    :return: Lists of extracted text regions (row list, col list), in same order as given fiducials
+    """
+    input_img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    img_h, img_w = input_img.shape
+    img_base_name = os.path.splitext(os.path.basename(img_path))[0]
+
+    if flip_horizontal:
+        input_img = utils.flip_horizontal(input_img)
+
+    img_light_corr = utils.light_correction(input_img)
+    fid_centers = find_fiducial_locations(img_light_corr)
+    rot_degrees = find_rotation_angle(fid_centers)
+
+    # rotate the input images, light corrected image & fiducials around the center of the image
+    input_img_rot = utils.rotate_image(input_img, rot_degrees)
+    img_light_corr_rot = utils.rotate_image(img_light_corr, rot_degrees)
+    fid_centers_rotated = utils.rotate_points(fid_centers, (img_h / 2., img_w / 2.), rot_degrees)
+
+    if fiducial_dir is not None:
+        fid_img = render_fiducials(input_img_rot, fid_centers_rotated)
+        fid_img_name = "_".join(['fiducial_fig', img_base_name])
+        utils.save_image(fid_img, fiducial_dir, fid_img_name)
+
+    # row/col addresses are indexed at 0 (000), columns end at 127 and rows end at 46
+    # The "origin" is in the bottom right of the image (after flipping).
+    max_col = 127
+    max_row = 46
+
+    # Both column and row identifiers are 3 characters in length.
+    # From the fiducial location, the column address is found to the left,
+    # and the row address is found above.
+    # The character height is roughly 32 pixels.
+    # The region width is roughly 54 pixels, and this number is chosen to
+    # be equally divided by the 3 characters (so we can separate the three digits)
+    char_height = 52
+    char_width = 34
+    char_width_3x = char_width * 3
+
+    row_offset_x1 = 17
+    row_offset_x2 = row_offset_x1 - char_width_3x
+    row_offset_y1 = 209
+    row_offset_y2 = row_offset_y1 + char_height
+
+    col_offset_x1 = 305
+    col_offset_x2 = col_offset_x1 - char_width_3x
+    col_offset_y1 = 3
+    col_offset_y2 = col_offset_y1 + char_height
+
+    apt_w = 180
+    apt_h = 449
+    apt_offset_x1 = 200
+    apt_offset_x2 = apt_offset_x1 - apt_w
+    apt_offset_y1 = 356
+    apt_offset_y2 = apt_offset_y1 - apt_h
+
+    # List of dictionaries for apartment data
+    apt_data = []
+
+    for fid_loc in fid_centers_rotated:
+        # determine if fiducial is too close to an edge of the image
+        x = fid_loc[0]
+        y = fid_loc[1]
+
+        on_edge = is_edge_fiducial(input_img.shape, x, y)
+        if on_edge:
+            continue
+
+        # extract row & column sub-regions from the rotation & light corrected image
+        row_region = img_light_corr_rot[y - row_offset_y2:y - row_offset_y1, x - row_offset_x1:x - row_offset_x2]
+        col_region = img_light_corr_rot[y - col_offset_y2:y - col_offset_y1, x - col_offset_x1:x - col_offset_x2]
+
+        row_digits, row_scores = identify_digits(row_region, max_number=max_row, save_dir=digit_dir)
+        col_digits, col_scores = identify_digits(col_region, max_number=max_col, save_dir=digit_dir)
+
+        # extract apt region from rotated input image
+        apt_region = input_img_rot[y - apt_offset_y1:y - apt_offset_y2, x - apt_offset_x1:x - apt_offset_x2]
+
+        apt = {
+            'image_name': img_base_name,
+            'fid_x': fid_loc[0],
+            'fid_y': fid_loc[1],
+            'row_region': row_region,
+            'row_address': ''.join(row_digits),
+            'row_digits': row_digits,
+            'row_scores': row_scores,
+            'col_address': ''.join(col_digits),
+            'col_region': col_region,
+            'col_digits': col_digits,
+            'col_scores': col_scores,
+            'apt_region': apt_region
+        }
+
+        if apt_region_dir is not None:
+            apt_region_file_name = "_".join(
+                [
+                    'apt_region',
+                    img_base_name,
+                    apt['row_address'],
+                    apt['col_address']
+                ]
+            )
+
+            utils.save_image(apt_region, apt_region_dir, apt_region_file_name)
+
+        apt_data.append(apt)
+
+    return apt_data
+
+
+def extract_cell_data(
+        apt_data,
+        min_cell_area,
+        max_cell_area,
+):
+    # count the cells in each chamber -- simple percent of apartment method
+    for apt in apt_data:
+        edge_contours, edge_mask, non_edge_contours, non_edge_mask = find_apartment_blobs(apt['apt_region'])
+
+        edge_blob_area = (edge_mask > 0).sum()
+        edge_blob_apt_ratio = edge_blob_area / utils.apt_ref_area
+        edge_cell_count_min = round(edge_blob_area / max_cell_area)
+        edge_cell_count_max = round(edge_blob_area / min_cell_area)
+
+        non_edge_blob_area = (non_edge_mask > 0).sum()
+        non_edge_blob_apt_ratio = non_edge_blob_area / utils.apt_ref_area
+        # TODO: I'm reducing the cell sizes by 25% for the non-edge estimate,
+        #       as the non-edge contours are typically under-sized. Maybe make
+        #       this reduction scale value an input? Or do we dilate the contours
+        #       more?
+        non_edge_cell_count_min = round(non_edge_blob_area / (0.75 * max_cell_area))
+        non_edge_cell_count_max = round(non_edge_blob_area / (0.75 * min_cell_area))
+
+        apt['edge_blob_count'] = len(edge_contours)
+        apt['edge_blob_area'] = edge_blob_area
+        apt['edge_blob_apt_ratio'] = edge_blob_apt_ratio
+        apt['edge_cell_count_min'] = edge_cell_count_min
+        apt['edge_cell_count_max'] = edge_cell_count_max
+        apt['non_edge_blob_count'] = len(non_edge_contours)
+        apt['non_edge_blob_area'] = non_edge_blob_area
+        apt['non_edge_blob_apt_ratio'] = non_edge_blob_apt_ratio
+        apt['non_edge_cell_count_min'] = non_edge_cell_count_min
+        apt['non_edge_cell_count_max'] = non_edge_cell_count_max
+        apt['edge_contours'] = edge_contours
+        apt['edge_mask'] = edge_mask
+        apt['non_edge_contours'] = non_edge_contours
+        apt['non_edge_mask'] = non_edge_mask
+
+    return apt_data
+
+
 def render_apartment(apt_dict):
     # determine number of columns to plot
     col_count = 2  # default has 2 columns: pre-proc image & row/col address regions (w/metadata)
@@ -310,7 +338,7 @@ def render_apartment(apt_dict):
         col_count += 1
 
     fig = plt.figure(constrained_layout=True, figsize=(2.1 * col_count, 5))
-    gs = fig.add_gridspec(ncols=col_count, nrows=4, height_ratios=[1, 1, 3, 3])
+    gs = fig.add_gridspec(ncols=col_count, nrows=5, height_ratios=[1, 1, 3, 3, 3])
 
     current_col = 0
 
@@ -356,7 +384,7 @@ def render_apartment(apt_dict):
         edge_text_str = '\n'.join(
             (
                 r'Edge stats:',
-                r'blob cnt: %d' % apt_dict['edge_blob_count'],
+                r'# blobs: %d' % apt_dict['edge_blob_count'],
                 r'count min: %d' % apt_dict['edge_cell_count_min'],
                 r'count max: %d' % apt_dict['edge_cell_count_max'],
                 r'area: %d' % apt_dict['edge_blob_area'],
@@ -366,7 +394,7 @@ def render_apartment(apt_dict):
         non_edge_text_str = '\n'.join(
             (
                 r'Non-edge stats:',
-                r'blob cnt: %d' % apt_dict['non_edge_blob_count'],
+                r'# blobs: %d' % apt_dict['non_edge_blob_count'],
                 r'count min: %d' % apt_dict['non_edge_cell_count_min'],
                 r'count max: %d' % apt_dict['non_edge_cell_count_max'],
                 r'area: %d' % apt_dict['non_edge_blob_area'],
@@ -387,10 +415,12 @@ def render_apartment(apt_dict):
 
 
 def find_apartment_blobs(apt_img):
+    # TODO: separate individual methods into their own functions and control which ones are run by
+    #       kwarg list...might not be necessary if we decide to go with a single method
     region_shape = apt_img.shape
 
-    blur_median = cv2.medianBlur(apt_img, ksize=7)
-    blur_bilateral = cv2.bilateralFilter(apt_img, d=7, sigmaColor=5, sigmaSpace=31)
+    blur_median = cv2.medianBlur(apt_img, ksize=7)  # 7
+    blur_bilateral = cv2.bilateralFilter(apt_img, d=5, sigmaColor=5, sigmaSpace=31)  # 7
 
     # Next, we perform a pseudo DoG, though it's not really a diff of
     # Gaussian's, but still a diff of blurs. The bilateral blur retains
@@ -491,4 +521,7 @@ def find_apartment_blobs(apt_img):
     final_non_edge_mask = np.zeros(region_shape)
     cv2.drawContours(final_non_edge_mask, final_non_edge_contours, -1, 255, cv2.FILLED)
 
-    return edge_based_contours, final_edge_based_mask, final_non_edge_contours, final_non_edge_mask
+    return (
+        edge_based_contours, final_edge_based_mask,
+        final_non_edge_contours, final_non_edge_mask
+    )
